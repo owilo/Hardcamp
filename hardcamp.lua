@@ -1,3 +1,7 @@
+------------------
+-- Data storage --
+------------------
+
 local B = bit32
 
 local function ceilLog2(count)
@@ -10,9 +14,22 @@ local function ceilLog2(count)
     return b
 end
 
------ base 64
+local getMappings = function(alphabet)
+    local mappings = {
+        length = #alphabet
+    }
 
-local B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    for i = 1, #alphabet do
+        mappings[alphabet:sub(i, i)] = i - 1
+    end
+
+    return mappings
+end
+
+-- Base 64 helpers
+
+local B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+local B64_MAPPINGS = getMappings(B64_ALPHABET)
 
 local function encodeBase64(str)
     local out = {}
@@ -28,20 +45,17 @@ local function encodeBase64(str)
         local c3 = b2 and B.bor(B.lshift(B.band(b2, 0x0F), 2), b3 and B.rshift(b3, 6) or 0)
         local c4 = b3 and B.band(b3, 0x3F)
 
-        out[#out + 1] = B64_CHARS:sub(c1 + 1, c1 + 1)
-        out[#out + 1] = B64_CHARS:sub(c2 + 1, c2 + 1)
-        out[#out + 1] = c3 and B64_CHARS:sub(c3 + 1, c3 + 1) or "="
-        out[#out + 1] = c4 and B64_CHARS:sub(c4 + 1, c4 + 1) or "="
+        out[#out + 1] = B64_ALPHABET:sub(c1 + 1, c1 + 1)
+        out[#out + 1] = B64_ALPHABET:sub(c2 + 1, c2 + 1)
+        out[#out + 1] = c3 and B64_ALPHABET:sub(c3 + 1, c3 + 1) or "="
+        out[#out + 1] = c4 and B64_ALPHABET:sub(c4 + 1, c4 + 1) or "="
 
         i = i + 3
     end
     return table.concat(out)
 end
 
-local B64_DECODE = {}
-for i = 1, #B64_CHARS do
-    B64_DECODE[B64_CHARS:sub(i, i)] = i - 1
-end
+local B64_MAPPINGS = getMappings(B64_ALPHABET)
 
 local function decodeBase64(str)
     str = str:gsub("[^%w_%-=]", "")
@@ -50,10 +64,10 @@ local function decodeBase64(str)
     local i = 1
     local n = #str
     while i <= n do
-        local c1 = B64_DECODE[str:sub(i, i)] or 0
-        local c2 = B64_DECODE[str:sub(i + 1, i + 1)] or 0
-        local c3 = B64_DECODE[str:sub(i + 2, i + 2)]
-        local c4 = B64_DECODE[str:sub(i + 3, i + 3)]
+        local c1 = B64_MAPPINGS[str:sub(i, i)] or 0
+        local c2 = B64_MAPPINGS[str:sub(i + 1, i + 1)] or 0
+        local c3 = B64_MAPPINGS[str:sub(i + 2, i + 2)]
+        local c4 = B64_MAPPINGS[str:sub(i + 3, i + 3)]
 
         out[#out + 1] = string.char(B.band(B.bor(B.lshift(c1, 2), B.rshift(c2, 4)), 0xFF))
         if c3 then
@@ -68,7 +82,7 @@ local function decodeBase64(str)
     return table.concat(out)
 end
 
------ Writer
+-- Writer
 
 local BitWriter = {}
 BitWriter.__index = BitWriter
@@ -101,17 +115,24 @@ function BitWriter:writeBits(value, bitCount)
     return self
 end
 
-function BitWriter:writeString(str, size, minDictionaryRange, maxDictionaryRange)
+function BitWriter:writeString(str, mappings, size)
     size = size or #str
-    minDictionaryRange = minDictionaryRange or 0
-    maxDictionaryRange = maxDictionaryRange or 255
-    local charSize = ceilLog2(maxDictionaryRange - minDictionaryRange + 1)
-
+    local charSize = ceilLog2(#mappings)
     for i = 1, size do
-        self:writeBits(str:byte(i) - minDictionaryRange, charSize)
+        self:writeBits(mappings[str:sub(i, i)] or 0, charSize)
     end
-
     return self
+end
+
+function BitWriter:writeAuthorList(authors)
+    self:writeBits(#authors, 8)
+    for _, author in ipairs(authors) do
+        local prefix, playerName, tag = author:match("^(%+)?([%w_]+)#(%d%d%d%d)$")
+        self:writeBits(prefix and 1 or 0, 1) -- "+" prefix
+        self:writeBits(#playerName, 4) -- Author name length
+        self:writeString(playerName, B64_MAPPINGS, #playerName) -- Author names can conveniently be treated as a base64 string
+        self:writeBits(tonumber(tag), 14) -- Author tag
+    end
 end
 
 function BitWriter:toString()
@@ -131,7 +152,7 @@ function BitWriter:toBase64()
     return encodeBase64(self:toString())
 end
 
------ Reader
+-- Reader
 
 local BitReader = {}
 BitReader.__index = BitReader
@@ -172,15 +193,26 @@ function BitReader:readBits(bitCount)
     return value
 end
 
-function BitReader:readString(size, minDictionaryRange, maxDictionaryRange)
-    minDictionaryRange = minDictionaryRange or 0
-    maxDictionaryRange = maxDictionaryRange or 255
-    local charSize = ceilLog2(maxDictionaryRange - minDictionaryRange + 1)
+function BitReader:readString(alphabet, size)
+    local charSize = ceilLog2(#alphabet)
 
     local chars = {}
     for i = 1, size do
-        chars[i] = string.char(self:readBits(charSize) + minDictionaryRange)
+        chars[i] = string.char(alphabet[self:readBits(charSize)] or 0)
     end
 
     return table.concat(chars)
+end
+
+function BitReader:readAuthorList()
+    local authors = {}
+    local count = self:readBits(8)
+    for i = 1, count do
+        local prefix = self:readBits(1) == 1 and "+" or "" -- "+" prefix
+        local playerNameLength = self:readBits(4) -- Author name length
+        local playerName = self:readString(B64_ALPHABET, playerNameLength) -- Author name
+        local tag = string.format("%04d", self:readBits(14)) -- Author tag
+        authors[i] = string.format("%s%s#%s", prefix, playerName, tag)
+    end
+    return authors
 end
