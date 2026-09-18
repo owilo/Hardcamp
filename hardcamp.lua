@@ -117,7 +117,7 @@ end
 
 function BitWriter:writeString(str, mappings, size)
     size = size or #str
-    local charSize = ceilLog2(#mappings)
+    local charSize = ceilLog2(mappings.length)
     for i = 1, size do
         self:writeBits(mappings[str:sub(i, i)] or 0, charSize)
     end
@@ -127,8 +127,8 @@ end
 function BitWriter:writeAuthorList(authors)
     self:writeBits(#authors, 8)
     for _, author in ipairs(authors) do
-        local prefix, playerName, tag = author:match("^(%+)?([%w_]+)#(%d%d%d%d)$")
-        self:writeBits(prefix and 1 or 0, 1) -- "+" prefix
+        local prefix, playerName, tag = author:match("^(%+?)([%w_]+)#(%d%d%d%d)$")
+        self:writeBits(prefix == "+" and 1 or 0, 1) -- "+" prefix
         self:writeBits(#playerName, 4) -- Author name length
         self:writeString(playerName, B64_MAPPINGS, #playerName) -- Author names can conveniently be treated as a base64 string
         self:writeBits(tonumber(tag), 14) -- Author tag
@@ -137,12 +137,12 @@ end
 
 function BitWriter:writeVariableLength(value, blockSize)
     blockSize = blockSize or 7
-    while value > 0 do
+    repeat
         local block = B.band(value, B.lshift(1, blockSize) - 1)
         value = B.rshift(value, blockSize)
         self:writeBits(block, blockSize)
         self:writeBits(value > 0 and 1 or 0, 1) -- Continuation bit
-    end
+    until value == 0
 end
 
 function BitWriter:writeMaps(maps, authors)
@@ -150,10 +150,12 @@ function BitWriter:writeMaps(maps, authors)
     local previousMapCode = 0
     local authorsBitCount = ceilLog2(#authors)
 
-    for mapCode, mapDefinition in ipairs(maps) do
-        local delta = mapCode - previousMapCode
+    for _, map in ipairs(maps) do
+        local delta = map.mapCode - previousMapCode
+        previousMapCode = map.mapCode
+
         self:writeVariableLength(delta, 5)
-        self:writeBits(map.author, authorsBitCount)
+        self:writeBits(map.author - 1, authorsBitCount)
         self:writeBits(map.difficulty - 1, 2)
         self:writeBits(map.sizemap and 1 or 0, 1)
     end
@@ -161,14 +163,17 @@ end
 
 function BitWriter:toString()
     local count = #self.bytes
+
     if self.currentBit == 0 then
         count = count - 1
     end
 
     local t = {}
+
     for i = 1, count do
-        t[i] = self.bytes[i]:char()
+        t[i] = string.char(self.bytes[i])
     end
+
     return table.concat(t)
 end
 
@@ -222,7 +227,8 @@ function BitReader:readString(alphabet, size)
 
     local chars = {}
     for i = 1, size do
-        chars[i] = string.char(alphabet[self:readBits(charSize)] or 0)
+        local index = self:readBits(charSize) + 1
+        chars[i] = alphabet:sub(index, index)
     end
 
     return table.concat(chars)
@@ -269,16 +275,17 @@ function BitReader:readMaps(authors)
         local mapCode = previousMapCode + delta
         previousMapCode = mapCode
 
-        local authorIndex = self:readBits(authorsBitCount)
+        local authorIndex = self:readBits(authorsBitCount) + 1
         local difficulty = self:readBits(2) + 1
-        local sizemapFlag = self:readBits(1) == 1
+        local sizemap = self:readBits(1) == 1
 
         maps[i] = {
-            code = mapCode,
-            author = authors[authorIndex + 1],
+            mapCode = mapCode,
+            author = authorIndex,
             difficulty = difficulty,
-            sizemap = sizemapFlag,
+            sizemap = sizemap
         }
     end
+
     return maps
 end
