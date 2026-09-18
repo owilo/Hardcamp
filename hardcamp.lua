@@ -95,7 +95,7 @@ function BitWriter.new()
 end
 
 function BitWriter:writeBits(value, bitCount)
-    value = B.band(value, B.lshift(1, bits) - 1)
+    value = B.band(value, B.lshift(1, bitCount) - 1)
 
     while bitCount > 0 do
         local take = math.min(8 - self.currentBit, bitCount)
@@ -132,6 +132,30 @@ function BitWriter:writeAuthorList(authors)
         self:writeBits(#playerName, 4) -- Author name length
         self:writeString(playerName, B64_MAPPINGS, #playerName) -- Author names can conveniently be treated as a base64 string
         self:writeBits(tonumber(tag), 14) -- Author tag
+    end
+end
+
+function BitWriter:writeVariableLength(value, blockSize)
+    blockSize = blockSize or 7
+    while value > 0 do
+        local block = B.band(value, B.lshift(1, blockSize) - 1)
+        value = B.rshift(value, blockSize)
+        self:writeBits(block, blockSize)
+        self:writeBits(value > 0 and 1 or 0, 1) -- Continuation bit
+    end
+end
+
+function BitWriter:writeMaps(maps, authors)
+    self:writeBits(#maps, 16)
+    local previousMapCode = 0
+    local authorsBitCount = ceilLog2(#authors)
+
+    for mapCode, mapDefinition in ipairs(maps) do
+        local delta = mapCode - previousMapCode
+        self:writeVariableLength(delta, 5)
+        self:writeBits(map.author, authorsBitCount)
+        self:writeBits(map.difficulty - 1, 2)
+        self:writeBits(map.sizemap and 1 or 0, 1)
     end
 end
 
@@ -215,4 +239,46 @@ function BitReader:readAuthorList()
         authors[i] = string.format("%s%s#%s", prefix, playerName, tag)
     end
     return authors
+end
+
+function BitReader:readVariableLength(payloadSize)
+    payloadSize = payloadSize or 7
+    local value = 0
+    local shift = 0
+    while shift < 64 do
+        local block = self:readBits(payloadSize)
+        value = B.bor(value, B.lshift(block, shift))
+        shift = shift + payloadSize
+        local continuationBit = self:readBits(1)
+        if continuationBit == 0 then
+            return value
+        end
+    end
+    -- Failsafe
+    return value
+end
+
+function BitReader:readMaps(authors)
+    local maps = {}
+    local mapCount = self:readBits(16)
+    local previousMapCode = 0
+    local authorsBitCount = ceilLog2(#authors)
+
+    for i = 1, mapCount do
+        local delta = self:readVariableLength(5)
+        local mapCode = previousMapCode + delta
+        previousMapCode = mapCode
+
+        local authorIndex = self:readBits(authorsBitCount)
+        local difficulty = self:readBits(2) + 1
+        local sizemapFlag = self:readBits(1) == 1
+
+        maps[i] = {
+            code = mapCode,
+            author = authors[authorIndex + 1],
+            difficulty = difficulty,
+            sizemap = sizemapFlag,
+        }
+    end
+    return maps
 end
