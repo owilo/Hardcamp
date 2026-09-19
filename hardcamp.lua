@@ -14,7 +14,7 @@ local function ceilLog2(count)
     return b
 end
 
-local getMappings = function(alphabet)
+local function getMappings(alphabet)
     local mappings = {
         length = #alphabet
     }
@@ -24,6 +24,44 @@ local getMappings = function(alphabet)
     end
 
     return mappings
+end
+
+local function sortedSearch(t, value, key)
+    key = key or function(entry)
+        return entry
+    end
+
+    local low = 1
+    local high = #t
+
+    while low <= high do
+        local mid = math.floor((low + high) / 2)
+        local entry = t[mid]
+        local entryKey = key(entry)
+
+        if entryKey == value then
+            return entry
+        elseif entryKey < value then
+            low = mid + 1
+        else
+            high = mid - 1
+        end
+    end
+
+    return nil
+end
+
+local function deepCopy(t)
+    if type(t) ~= "table" then
+        return t
+    end
+
+    local copy = {}
+    for k, v in pairs(t) do
+        copy[k] = deepCopy(v)
+    end
+
+    return copy
 end
 
 -- Base 64 helpers
@@ -290,36 +328,124 @@ function BitReader:readMaps(authors)
     return maps
 end
 
+----------------------
+-- Global variables --
+----------------------
+
+local room = {
+    respawnPlayers = {}
+}
+
+------------------------
+-- Players management --
+------------------------
+
+local function markPlayerForRespawn(playerName)
+    room.respawnPlayers[#room.respawnPlayers + 1] = playerName
+end
+
+local function respawnPlayers()
+    for i = 1, #room.respawnPlayers do
+        tfm.exec.respawnPlayer(room.respawnPlayers[i])
+    end
+    room.respawnPlayers = {}
+end
+
+function eventPlayerDied(playerName)
+    markPlayerForRespawn(playerName)
+end
+
+function eventPlayerWon(playerName)
+    markPlayerForRespawn(playerName)
+end
+
+function eventNewPlayer(playerName)
+    markPlayerForRespawn(playerName)
+end
+
+----------
+-- Maps --
+----------
+
+local MAPS_DATA = "T0ZiSQDAPZrZeVxKASBCLEUAwDGe1sLiCQCwYUVbkWQYZbCi8Nmh8PkFOKDUzs6LAQB3oSsnsi0A4AbRA9GW_QJY1M3o7AEAUCq1jkRXF-1yEhxrrKoCADjyOI9lRfQU2RYAkJKbeqvGnugXwAx02zwSAECGtsoOm6JWFCXXCASsLQkAoEXUVgBABWsqyoyXFND15GSu9L4AJbnwyQIAlxHZ1ltZjVtFAAAxqkt-AZZBXdabY-7dTgDAPavWtuj5BTBgNbVTtLHooJ2iV5oaiAIAzhDP2SVFAIACKVqWaIqWKACAgfDTVo8TSS0MAQBXiWsrniIAwKTW-7TzC4BXx2md13oAgJRCrdTOzlsBAFeJZ6uBnj1AgVJb0W32xBMAUIZmlh4fCYnO1dauroMUQ5wdqsIcExzXEwBgmeausgcASMMVWe1MvRUAsJcWax2KoiiKAgBOKLXz1E4AQF6dlqIlGncAAHzQtYW11-sA2YL-LCkuBSYRzToGBprbiumKtlOWWGeNC9E09danCxWx6AEArpFRcUPdL4AFped5LAAghVBbS8-bZQAAKZp2ng_KQENUBQCcoqXaKpIAgJRalyO9dWUBAAy4K7pqXOlpKwsAyMjTStQ9NRkAYEAsaqsMAKhCBFERAECJm6YAgMs0jvTcFQBQwZqKMgDAjhTlSBYAYAbamdwWmzFkdMVTBABc5H0u63UKgAVOtA29dUM3GwBgicayXggAKMsTvXP1YorWwvLpZDCAFNETFGzckK4oJ5IAgJRa9PU69PUAACa9WkmKCouzRO08xZjEew5Qb_UC4HR_ZZZZLo8ARLY3BLhRkRggtUMokR2ci0TyukrE9nchkFnPg4TksC1oofM6SCRGxaGQlxeDREy2HQi4RZwogD_BIREeFYNEbJCpxazPwgDaXoUD7jI55MfLIJEVnRIBUc-W0BYa8XFQQMBuh4TkNjiERPFAAFMcFCHr5gDddYNETLlIYM2DQUg1UOANCQRm-VtALyUGYJAQZK__QZAU70TB2zcY5M-FQ3TRLQSBWz844JYvQViWOgQ-L0Fenzhkjj1BTOgg_GSDA3ASDA4xazs4gPyNBlT8DxxwzeiAmCYUOuXvsFFnDoDJ6ZA6HwNH8ueBcQ4O2O1YOCS0oQfmunhg7XeCAN2VDZRyOAwc6cdVOETcz-CA1uYDAvz4FhI5VSoRsAyDRE6SSWg0gwNSmUuIvsWAkL0-Dll9LRFxHBL56TJw4N9F4Zb0zhzx-8cRx5HBkcERwYHAAcGBwJEVSUQEy-AWvhVusVVUwOVMh4R6vBYSM_1qE50NDqjrg5BaHiBA-yEC2TYkmUVxkGDcAwJknDmEPo3DfBXK6YWpw2RWSSzcg8TaFMvF7JEJ7BGpJK23XO6ZoICOg0RQNdDlfw0J0nupwNeTXWL0UOg8FwHak1EEbysHyHnITSWHhPgUqgDFLV7gUxglFSXg9pwXLFjpLpH2JxxIZeUQ0lPg1IlK0lC4AASFXNI5qYRHqQp-_w0mcN-tF5MVMNjXIxFULk5ZFVJGhJRdLDqBsQx40dAo3j1fYFJQgO12C3crA34ODlEOujKYMjhL5iIZbA7S6UWXsoY02MPiAvkcNnBZ5gLQfQ5Cy-AC2x40gfdBgb0sOHidQ0jTUGSGuYPIqoNSRC5Bv8va-BDFJA8PQGiSfi4mIV3hl_8lKqhXogJ1Jz5ZSeET4SPho-CT4BPiE9wWPrkjncY2OGDXkY9GVPikFxddQr04JA4UOEfhANL4JD4-6dHiEzb4oCSFA2SS-CRui0_GX_gkhj5xhU9-XFDA5YMPcgOoHPuI-CCtiU_WPPls5z4o_8A4XQ6AiSkI8OoD3g0-aYPPig9infi8hI1L1tsQRR2LS2w60KRfEwiiT9rgA94OPkDVBwKwHT5ZPnk-0T4pPlk-yT4hPjpR4iPRNT5am0_2etAp3o1PjI9Wm7hEBwVd3OQT2x50IVMhg10dPhp0MoUPXnDIBBybTGZRACH4iORC8M1DhNkIRk0-CT6QjU9Od_jMhC7IxWQpGSYUkx1CdNCAgK4L0nT-gIi9A5Jy5JOyGOH5BESFU9AKolP6bFIoFAnXTnhQgGSHT-DeIIF8iY9a4wM0Nk4K3-ETXhUgGyGIZDL4JO-LD-qSyED2IGJxIxMUJEooY0MEtvqkh4dR7P_4pBWEW-FAGBAePrGJj2rQuAR1EZ1o98pk3oNM1D845cgktYMM-NooCYyHTFzz-CT4IPik-0Rmh0_--vgELYOP7FSAJD8yccvEBHE0TDi5D1LJ9Fg5oR6VU2KaOOWEq2Hc1CDkVI2PznAwqWUHEcJEFV5ECJDFQBWWT0z9KxQiVAJUAhQCVAIU9oSE_BaITog5JQLucEilSKFIBe-IgW0hFdUtSDlnZZj7FExJTGljgYR7JUiyfUMFnxVWSVeDFJEjaW-RVVB7WMFvUDkpFMoBlQSFkyjGxkgZu5VcCVX2QeVCSULlQclAyZ9cEdWAtFMp5r2Hj84GFQKVA7UBpQC1tzksOUi45Ligj1LS8cCY8hWM0v9gBZovSFLj4aT4DEj6z8Cl_iPllQNCbkOV0XBll4eUyNFgoQ9c4cXgKBQVINDFYaVqFToWTjrFgZAZWyVsgxbsGHEejg2C5HhYZW8Iiy-CZnhw-R0LUnm0IC2FBRLShhR4FUhZ44AU2RVOSf_lGPU2juHxQFE_VFzga8GY3kIGXIVXTHF4gRUJpl5oBR0-YMDf4LVWHmJQZ4LkNQ9gAF2hqX-Tof6TZPSYMMn9EUhU55TUDkwSxSOGkw8godngGHODTH4JZVBWgGwWIAM="
+local bitReader = BitReader.fromBase64(MAPS_DATA)
+local AUTHORS = bitReader:readAuthorList()
+local MAPS = bitReader:readMaps(AUTHORS)
+
+local function getMapEntry(mapCode)
+    local mapEntry = sortedSearch(MAPS, mapCode, function(entry)
+        return entry.mapCode
+    end)
+    if mapEntry then
+        local newMapEntry = deepCopy(mapEntry)
+        newMapEntry.author = AUTHORS[mapEntry.author] or "Module"
+        return newMapEntry
+    else
+        local isPlayerMap = tfm.get.room.xmlMapInfo and tfm.get.room.xmlMapInfo.mapCode == mapCode
+        return {
+            mapCode = mapCode,
+            author = isPlayerMap and tfm.get.room.xmlMapInfo.author,
+            difficulty = 0,
+            sizemap = false
+        }
+    end
+end
+
+local DIFFICULTY_STARS = {
+    "<G>★★★★",
+    "<VP>★<G>★★★",
+    "<J>★★<G>★★",
+    "<O>★★★<G>★",
+    "<R>★★★★"
+}
+
+local updateMapDataUi = function(mapEntry)
+    local difficultyDisplay = DIFFICULTY_STARS[mapEntry.difficulty + 1] or DIFFICULTY_STARS[1]
+    if mapEntry.author then
+        -- Player maps
+        ui.setMapName(string.format(
+            "<J>%s <BL>- @%d %s  <G>|<N>   Difficulty : %s<G>",
+            mapEntry.author,
+            mapEntry.mapCode,
+            mapEntry.sizemap and "<V>[S]" or "",
+            difficultyDisplay
+        ))
+    else
+        -- Vanilla maps
+        ui.setMapName(string.format(
+            "<J>%d   <G>|<N>   Difficulty : %s<G>",
+            mapEntry.mapCode,
+            difficultyDisplay
+        ))
+    end
+end
+
+function eventLoop(elapsedTime, remainingTime)
+    if remainingTime < 500 then
+        tfm.exec.newGame(MAPS[math.random(#MAPS)].mapCode)
+    end
+
+    respawnPlayers()
+end
+
+function eventNewGame()
+    local mapCode = tonumber(tfm.get.room.currentMap:match("(%d+)"))
+    local mapEntry = getMapEntry(mapCode)
+    updateMapDataUi(mapEntry)
+    tfm.exec.setGameTime(360, true)
+end
+
 ----------------
 -- Main logic --
 ----------------
 
-local MAPS = "T0ZiSQDAPZrZeVxKASBCLEUAwDGe1sLiCQCwYUVbkWQYZbCi8Nmh8PkFOKDUzs6LAQB3oSsnsi0A4AbRA9GW_QJY1M3o7AEAUCq1jkRXF-1yEhxrrKoCADjyOI9lRfQU2RYAkJKbeqvGnugXwAx02zwSAECGtsoOm6JWFCXXCASsLQkAoEXUVgBABWsqyoyXFND15GSu9L4AJbnwyQIAlxHZ1ltZjVtFAAAxqkt-AZZBXdabY-7dTgDAPavWtuj5BTBgNbVTtLHooJ2iV5oaiAIAzhDP2SVFAIACKVqWaIqWKACAgfDTVo8TSS0MAQBXiWsrniIAwKTW-7TzC4BXx2md13oAgJRCrdTOzlsBAFeJZ6uBnj1AgVJb0W32xBMAUIZmlh4fCYnO1dauroMUQ5wdqsIcExzXEwBgmeausgcASMMVWe1MvRUAsJcWax2KoiiKAgBOKLXz1E4AQF6dlqIlGncAAHzQtYW11-sA2YL-LCkuBSYRzToGBprbiumKtlOWWGeNC9E09danCxWx6AEArpFRcUPdL4AFped5LAAghVBbS8-bZQAAKZp2ng_KQENUBQCcoqXaKpIAgJRalyO9dWUBAAy4K7pqXOlpKwsAyMjTStQ9NRkAYEAsaqsMAKhCBFERAECJm6YAgMs0jvTcFQBQwZqKMgDAjhTlSBYAYAbamdwWmzFkdMVTBABc5H0u63UKgAVOtA29dUM3GwBgicayXggAKMsTvXP1YorWwvLpZDCAFNETFGzckK4oJ5IAgJRa9PU69PUAACa9WkmKCouzRO08xZjEew5Qb_UC4HR_ZZZZLo8ARLY3BLhRkRggtUMokR2ci0TyukrE9nchkFnPg4TksC1oofM6SCRGxaGQlxeDREy2HQi4RZwogD_BIREeFYNEbJCpxazPwgDaXoUD7jI55MfLIJEVnRIBUc-W0BYa8XFQQMBuh4TkNjiERPFAAFMcFCHr5gDddYNETLlIYM2DQUg1UOANCQRm-VtALyUGYJAQZK__QZAU70TB2zcY5M-FQ3TRLQSBWz844JYvQViWOgQ-L0Fenzhkjj1BTOgg_GSDA3ASDA4xazs4gPyNBlT8DxxwzeiAmCYUOuXvsFFnDoDJ6ZA6HwNH8ueBcQ4O2O1YOCS0oQfmunhg7XeCAN2VDZRyOAwc6cdVOETcz-CA1uYDAvz4FhI5VSoRsAyDRE6SSWg0gwNSmUuIvsWAkL0-Dll9LRFxHBL56TJw4N9F4Zb0zhzx-8cRx5HBkcERwYHAAcGBwJEVSUQEy-AWvhVusVVUwOVMh4R6vBYSM_1qE50NDqjrg5BaHiBA-yEC2TYkmUVxkGDcAwJknDmEPo3DfBXK6YWpw2RWSSzcg8TaFMvF7JEJ7BGpJK23XO6ZoICOg0RQNdDlfw0J0nupwNeTXWL0UOg8FwHak1EEbysHyHnITSWHhPgUqgDFLV7gUxglFSXg9pwXLFjpLpH2JxxIZeUQ0lPg1IlK0lC4AASFXNI5qYRHqQp-_w0mcN-tF5MVMNjXIxFULk5ZFVJGhJRdLDqBsQx40dAo3j1fYFJQgO12C3crA34ODlEOujKYMjhL5iIZbA7S6UWXsoY02MPiAvkcNnBZ5gLQfQ5Cy-AC2x40gfdBgb0sOHidQ0jTUGSGuYPIqoNSRC5Bv8va-BDFJA8PQGiSfi4mIV3hl_8lKqhXogJ1Jz5ZSeET4SPho-CT4BPiE9wWPrkjncY2OGDXkY9GVPikFxddQr04JA4UOEfhANL4JD4-6dHiEzb4oCSFA2SS-CRui0_GX_gkhj5xhU9-XFDA5YMPcgOoHPuI-CCtiU_WPPls5z4o_8A4XQ6AiSkI8OoD3g0-aYPPig9infi8hI1L1tsQRR2LS2w60KRfEwiiT9rgA94OPkDVBwKwHT5ZPnk-0T4pPlk-yT4hPjpR4iPRNT5am0_2etAp3o1PjI9Wm7hEBwVd3OQT2x50IVMhg10dPhp0MoUPXnDIBBybTGZRACH4iORC8M1DhNkIRk0-CT6QjU9Od_jMhC7IxWQpGSYUkx1CdNCAgK4L0nT-gIi9A5Jy5JOyGOH5BESFU9AKolP6bFIoFAnXTnhQgGSHT-DeIIF8iY9a4wM0Nk4K3-ETXhUgGyGIZDL4JO-LD-qSyED2IGJxIxMUJEooY0MEtvqkh4dR7P_4pBWEW-FAGBAePrGJj2rQuAR1EZ1o98pk3oNM1D845cgktYMM-NooCYyHTFzz-CT4IPik-0Rmh0_--vgELYOP7FSAJD8yccvEBHE0TDi5D1LJ9Fg5oR6VU2KaOOWEq2Hc1CDkVI2PznAwqWUHEcJEFV5ECJDFQBWWT0z9KxQiVAJUAhQCVAIU9oSE_BaITog5JQLucEilSKFIBe-IgW0hFdUtSDlnZZj7FExJTGljgYR7JUiyfUMFnxVWSVeDFJEjaW-RVVB7WMFvUDkpFMoBlQSFkyjGxkgZu5VcCVX2QeVCSULlQclAyZ9cEdWAtFMp5r2Hj84GFQKVA7UBpQC1tzksOUi45Ligj1LS8cCY8hWM0v9gBZovSFLj4aT4DEj6z8Cl_iPllQNCbkOV0XBll4eUyNFgoQ9c4cXgKBQVINDFYaVqFToWTjrFgZAZWyVsgxbsGHEejg2C5HhYZW8Iiy-CZnhw-R0LUnm0IC2FBRLShhR4FUhZ44AU2RVOSf_lGPU2juHxQFE_VFzga8GY3kIGXIVXTHF4gRUJpl5oBR0-YMDf4LVWHmJQZ4LkNQ9gAF2hqX-Tof6TZPSYMMn9EUhU55TUDkwSxSOGkw8godngGHODTH4JZVBWgGwWIAM="
-local bitReader = BitReader.fromBase64(MAPS)
-local AUTHORS = bitReader:readAuthorList()
-local MAPS = bitReader:readMaps(AUTHORS)
-
-local function main()
+local function main()    
     tfm.exec.disableAfkDeath()
     tfm.exec.disableAutoNewGame()
     tfm.exec.disableAutoShaman()
     tfm.exec.disableAutoTimeLeft()
 
     tfm.exec.newGame(MAPS[math.random(#MAPS)].mapCode)
-end
-
-function eventPlayerDied(playerName)
-    tfm.exec.respawnPlayer(playerName)
-end
-
-function eventLoop (elapsedTime, remainingTime)
-    if remainingTime < 500 then
-        tfm.exec.newGame(MAPS[math.random(#MAPS)].mapCode)
-    end
-end
-
-function eventNewGame()
-    tfm.exec.setGameTime(360, true)
 end
 
 main()
