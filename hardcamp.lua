@@ -423,8 +423,12 @@ end
 
 local room = {
     respawnPlayers = {},
+    currentMapEntry = nil,
     isSizeMap = false,
     playerSizes = nil,
+    rotation = {1, 3, 2, 1, 4, 2, 1, 3, 2},
+    currentRotationIndex = 1,
+    xmlTree = nil
 }
 
 ---------------
@@ -484,10 +488,12 @@ function eventPlayerDied(playerName)
 end
 
 function eventPlayerWon(playerName)
+    tfm.exec.setPlayerScore(playerName, room.currentMapEntry.difficulty, true)
     markPlayerForRespawn(playerName)
 end
 
 local function initializePlayer(playerName)
+    tfm.exec.setPlayerScore(playerName, 0, false)
     for key, _ in pairs(KEY_CALLBACKS) do
         system.bindKeyboard(playerName, key, true, true)
     end
@@ -513,8 +519,6 @@ local bitReader = BitReader.fromBase64(MAPS_DATA)
 local AUTHORS = bitReader:readPlayerList()
 local MAPS = bitReader:readMaps(AUTHORS)
 
-local currentMapEntry = nil
-
 local function getMapEntry(mapCode)
     local mapEntry = sortedSearch(MAPS, mapCode, function(entry)
         return entry.mapCode
@@ -532,6 +536,19 @@ local function getMapEntry(mapCode)
             sizemap = false
         }
     end
+end
+
+local function playNextMap()
+    local nextDifficulty = room.rotation[room.currentRotationIndex]
+
+    -- TODO Access structure
+    local selectedMapEntry = nil
+    repeat
+        selectedMapEntry = MAPS[math.random(#MAPS)]
+    until selectedMapEntry.difficulty == nextDifficulty
+
+    room.currentRotationIndex = (room.currentRotationIndex % #room.rotation) + 1
+    tfm.exec.newGame(selectedMapEntry.mapCode)
 end
 
 local DIFFICULTY_STARS = {
@@ -565,7 +582,7 @@ end
 
 function eventLoop(elapsedTime, remainingTime)
     if remainingTime < 500 then
-        tfm.exec.newGame(MAPS[math.random(#MAPS)].mapCode)
+        playNextMap()
     end
 
     respawnPlayers()
@@ -573,10 +590,10 @@ end
 
 function eventNewGame()
     local mapCode = tonumber(tfm.get.room.currentMap:match("(%d+)"))
-    currentMapEntry = getMapEntry(mapCode)
+    room.currentMapEntry = getMapEntry(mapCode)
 
     room.playerSizes = nil
-    if currentMapEntry.author then
+    if room.currentMapEntry.author then
         room.xmlTree = parseXML(tfm.get.room.xmlMapInfo.xml)
         local mapParameters = xmlFind(room.xmlTree, "C.P")
         local sizeAttribute = mapParameters[1].attributes.size
@@ -599,7 +616,7 @@ function eventNewGame()
         end
     end
 
-    updateMapDataUi(currentMapEntry)
+    updateMapDataUi(room.currentMapEntry)
     tfm.exec.setGameTime(360, true)
 end
 
@@ -607,17 +624,23 @@ end
 -- Main logic --
 ----------------
 
-local function main()    
-    tfm.exec.disableAfkDeath()
+local function initializeRoom()
     tfm.exec.disableAutoNewGame()
     tfm.exec.disableAutoShaman()
+    tfm.exec.disableAutoScore()
     tfm.exec.disableAutoTimeLeft()
+    tfm.exec.disableAfkDeath()
+    tfm.exec.disablePhysicalConsumables()
 
     for playerName, _ in pairs(tfm.get.room.playerList) do
         initializePlayer(playerName)
     end
+end    
 
-    tfm.exec.newGame(MAPS[math.random(#MAPS)].mapCode)
+local function main()    
+    initializeRoom()
+
+    playNextMap()
 end
 
 main()
