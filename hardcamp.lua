@@ -527,12 +527,6 @@ function eventNewPlayer(playerName)
     markPlayerForRespawn(playerName)
 end
 
-function eventTextAreaCallback(textAreaId, playerName, eventName)
-    print(textAreaId)
-    print(playerName)
-    print(eventName)
-end
-
 ----------
 -- Maps --
 ----------
@@ -565,10 +559,16 @@ local function getMapEntry(maps, mapCode)
     }
 end
 
-local function playNextMap()
-    local mapList = MAPS[room.rotation[room.currentRotationIndex]]
-    room.currentRotationIndex = (room.currentRotationIndex % #room.rotation) + 1
+local function playRandomMap(difficulty)
+    difficulty = difficulty or math.random(4)
+    local mapList = MAPS[difficulty]
     tfm.exec.newGame(mapList[math.random(#mapList)].mapCode)
+end
+
+local function playNextMap()
+    local difficulty = room.rotation[room.currentRotationIndex]
+    room.currentRotationIndex = (room.currentRotationIndex % #room.rotation) + 1
+    playRandomMap(difficulty)
 end
 
 local DIFFICULTY_STARS = {
@@ -661,6 +661,18 @@ end
 local function main()    
     initializeRoom()
     playNextMap()
+end
+
+function eventChatCommand(playerName, command)
+    local cmd, args = command:match("^(%S+)%s*(.*)$")
+    if cmd == "map" or cmd == "np" then
+        local difficulty = tonumber(args:match("^%d+$"))
+        if difficulty and MAPS[difficulty] then
+            playRandomMap(difficulty)
+        else
+            playRandomMap()
+        end
+    end
 end
 
 main()
