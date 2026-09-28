@@ -93,8 +93,6 @@ local function encodeBase64(str)
     return table.concat(out)
 end
 
-local B64_MAPPINGS = getMappings(B64_ALPHABET)
-
 local function decodeBase64(str)
     str = str:gsub("[^%w_%-=]", "")
 
@@ -184,17 +182,38 @@ function BitWriter:writeVariableLength(value, blockSize)
 end
 
 function BitWriter:writeMaps(maps, authors)
-    self:writeBits(#maps, 16)
+    local mapCount = 0
+    local indices = {}
+    for i = 1, #maps do
+        mapCount = mapCount + #maps[i]
+        indices[i] = 1
+    end
+
+    self:writeBits(mapCount, 16)
     local previousMapCode = 0
     local authorsBitCount = ceilLog2(#authors)
 
-    for _, map in ipairs(maps) do
+    for i = 1, mapCount do
+        local minCode = math.huge
+        local minDifficultyIndex = 0
+        for j = 1, #maps do
+            local mapIndex = indices[j]
+            if mapIndex <= #maps[j] and maps[j][mapIndex].mapCode < minCode then
+                minCode = maps[j][mapIndex].mapCode
+                minDifficultyIndex = j
+            end
+        end
+
+        local minMapIndex = indices[minDifficultyIndex]
+        indices[minDifficultyIndex] = minMapIndex
+
+        local map = maps[minDifficultyIndex][minMapIndex]
         local delta = map.mapCode - previousMapCode
         previousMapCode = map.mapCode
 
         self:writeVariableLength(delta, 5)
         self:writeBits(map.author - 1, authorsBitCount)
-        self:writeBits(map.difficulty - 1, 2)
+        self:writeBits(minDifficultyIndex - 1, 2)
         self:writeBits(map.sizemap and 1 or 0, 1)
     end
 end
@@ -304,6 +323,11 @@ end
 
 function BitReader:readMaps(authors)
     local maps = {}
+
+    for i = 1, 4 do
+        maps[i] = {}
+    end
+
     local mapCount = self:readBits(16)
     local previousMapCode = 0
     local authorsBitCount = ceilLog2(#authors)
@@ -317,10 +341,9 @@ function BitReader:readMaps(authors)
         local difficulty = self:readBits(2) + 1
         local sizemap = self:readBits(1) == 1
 
-        maps[i] = {
+        maps[difficulty][#maps[difficulty] + 1] = {
             mapCode = mapCode,
             author = authorIndex,
-            difficulty = difficulty,
             sizemap = sizemap
         }
     end
@@ -519,36 +542,33 @@ local bitReader = BitReader.fromBase64(MAPS_DATA)
 local AUTHORS = bitReader:readPlayerList()
 local MAPS = bitReader:readMaps(AUTHORS)
 
-local function getMapEntry(mapCode)
-    local mapEntry = sortedSearch(MAPS, mapCode, function(entry)
-        return entry.mapCode
-    end)
-    if mapEntry then
-        local newMapEntry = deepCopy(mapEntry)
-        newMapEntry.author = AUTHORS[mapEntry.author] or "Module"
-        return newMapEntry
-    else
-        local isPlayerMap = tfm.get.room.xmlMapInfo and tfm.get.room.xmlMapInfo.mapCode == mapCode
-        return {
-            mapCode = mapCode,
-            author = isPlayerMap and tfm.get.room.xmlMapInfo.author,
-            difficulty = 0,
-            sizemap = false
-        }
+local function getMapEntry(maps, mapCode)
+    for i = 1, #maps do
+        local mapEntry = sortedSearch(maps[i], mapCode, function(entry)
+            return entry.mapCode
+        end)
+
+        if mapEntry then
+            local newMapEntry = deepCopy(mapEntry)
+            newMapEntry.author = AUTHORS[mapEntry.author] or "Module"
+            newMapEntry.difficulty = i
+            return newMapEntry
+        end
     end
+
+    local isPlayerMap = tfm.get.room.xmlMapInfo and tfm.get.room.xmlMapInfo.mapCode == mapCode
+    return {
+        mapCode = mapCode,
+        author = isPlayerMap and tfm.get.room.xmlMapInfo.author,
+        difficulty = 0,
+        sizemap = false
+    }
 end
 
 local function playNextMap()
-    local nextDifficulty = room.rotation[room.currentRotationIndex]
-
-    -- TODO Access structure
-    local selectedMapEntry = nil
-    repeat
-        selectedMapEntry = MAPS[math.random(#MAPS)]
-    until selectedMapEntry.difficulty == nextDifficulty
-
+    local mapList = MAPS[room.rotation[room.currentRotationIndex]]
     room.currentRotationIndex = (room.currentRotationIndex % #room.rotation) + 1
-    tfm.exec.newGame(selectedMapEntry.mapCode)
+    tfm.exec.newGame(mapList[math.random(#mapList)].mapCode)
 end
 
 local DIFFICULTY_STARS = {
@@ -590,7 +610,7 @@ end
 
 function eventNewGame()
     local mapCode = tonumber(tfm.get.room.currentMap:match("(%d+)"))
-    room.currentMapEntry = getMapEntry(mapCode)
+    room.currentMapEntry = getMapEntry(MAPS, mapCode)
 
     room.playerSizes = nil
     if room.currentMapEntry.author then
@@ -630,6 +650,7 @@ local function initializeRoom()
     tfm.exec.disableAutoScore()
     tfm.exec.disableAutoTimeLeft()
     tfm.exec.disableAfkDeath()
+    tfm.exec.disableDebugCommand()
     tfm.exec.disablePhysicalConsumables()
 
     for playerName, _ in pairs(tfm.get.room.playerList) do
@@ -639,7 +660,6 @@ end
 
 local function main()    
     initializeRoom()
-
     playNextMap()
 end
 
