@@ -560,7 +560,11 @@ local function getMapEntry(maps, mapCode)
 end
 
 local function playRandomMap(difficulty)
-    difficulty = difficulty or math.random(4)
+    if difficulty then
+        difficulty = math.max(1, math.min(4, difficulty))
+    else
+        difficulty = math.random(4)
+    end
     local mapList = MAPS[difficulty]
     tfm.exec.newGame(mapList[math.random(#mapList)].mapCode)
 end
@@ -672,6 +676,12 @@ function eventChatCommand(playerName, command)
         else
             playRandomMap()
         end
+    elseif cmd == "next" then
+        playNextMap()
+    elseif cmd == "reset" then
+        tfm.exec.newGame(room.currentMapEntry.mapCode)
+    elseif cmd == "dump" then
+        print("<R>" .. MAPS_DATA .. "</R>")
     end
 end
 
