@@ -451,8 +451,51 @@ local room = {
     playerSizes = nil,
     rotation = {1, 3, 2, 1, 4, 2, 1, 3, 2},
     currentRotationIndex = 1,
-    xmlTree = nil
+    xmlTree = nil,
+    leaderboard = {}
 }
+
+--------
+-- UI --
+--------
+
+local TextArea = {}
+TextArea.__index = TextArea
+
+local idCounter = 0
+
+function TextArea.new(text, x, y, width, height, backgroundColor, borderColor, backgroundAlpha, fixed)
+    idCounter = idCounter + 1
+    return setmetatable({
+        id = idCounter,
+        text = text,
+        x = x,
+        y = y,
+        width = width,
+        height = height,
+        backgroundColor = backgroundColor,
+        borderColor = borderColor,
+        backgroundAlpha = backgroundAlpha,
+        fixed = fixed
+    }, TextArea)
+end
+
+function TextArea:show(playerName)
+    ui.addTextArea(self.id, self.text, playerName, self.x + 5, self.y + 5, self.width - 10, self.height - 10, self.backgroundColor, self.borderColor, self.backgroundAlpha, self.fixed)
+end
+
+function TextArea:hide(playerName)
+    ui.removeTextArea(self.id, playerName)
+end
+
+function TextArea:updateText(newText)
+    self.text = newText
+    ui.updateTextArea(self.id, newText, nil)
+end
+
+local helpButtonBackground = TextArea.new("", 0, 20, 40, 10, 0x301f16, 0x301f16, 1.0, true)
+local helpButton = TextArea.new("<font size='10' color='#5073d4'><B>Help</B></font>", 0, 15, 50, 30, 0x000000, 0x000000, 0, true)
+local leaderboard = TextArea.new("<p align='center'><N><B>Leaderboard</B></p>", 810, 0, 200, 200, 0x301f16, 0x301f16, 0.75, true)
 
 ---------------
 -- Callbacks --
@@ -510,7 +553,51 @@ function eventPlayerDied(playerName)
     markPlayerForRespawn(playerName)
 end
 
-function eventPlayerWon(playerName)
+local function addLeaderboardEntry(playerName, time)
+    if #room.leaderboard == 0 then
+        room.leaderboard[1] = {playerName = playerName, time = time}
+        return
+    end
+
+    for i = 1, #room.leaderboard do
+        if time < room.leaderboard[i].time then
+            table.insert(room.leaderboard, i, {playerName = playerName, time = time})
+            if #room.leaderboard > 20 then
+                table.remove(room.leaderboard)
+            end
+            return
+        end
+    end
+    
+    if #room.leaderboard < 20 then
+        room.leaderboard[#room.leaderboard + 1] = {playerName = playerName, time = time}
+    end
+end
+
+local RANKING_COLORS = {
+    "J",
+    "N2",
+    "CE"
+}
+
+local function updateLeaderboard()
+    local leaderboardText = "<B>Leaderboard</B>\n"
+    for i = 1, #room.leaderboard do
+        local entry = room.leaderboard[i]
+        local color = RANKING_COLORS[i] or "BL"
+        leaderboardText = leaderboardText .. string.format("<p align='left'><%s>%d.</%s> %s <G>-</G> <V>%.2fs</V></p>", color, i, color, entry.playerName, entry.time / 100)
+    end
+    leaderboard:updateText(leaderboardText)
+end
+
+local function clearLeaderboard()
+    room.leaderboard = {}
+    updateLeaderboard()
+end
+
+function eventPlayerWon(playerName, timeElapsed, timeElapsedSinceRespawn)
+    addLeaderboardEntry(playerName, timeElapsedSinceRespawn)
+    updateLeaderboard()
     tfm.exec.setPlayerScore(playerName, room.currentMapEntry.difficulty, true)
     markPlayerForRespawn(playerName)
 end
@@ -520,6 +607,9 @@ local function initializePlayer(playerName)
     for key, _ in pairs(KEY_CALLBACKS) do
         system.bindKeyboard(playerName, key, true, true)
     end
+    helpButtonBackground:show(playerName)
+    helpButton:show(playerName)
+    leaderboard:show(playerName)
 end
 
 function eventNewPlayer(playerName)
@@ -641,6 +731,7 @@ function eventNewGame()
     end
 
     updateMapDataUi(room.currentMapEntry)
+    clearLeaderboard()
     tfm.exec.setGameTime(360, true)
 end
 
