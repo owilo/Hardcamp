@@ -205,7 +205,7 @@ function BitWriter:writeMaps(maps, authors)
         end
 
         local minMapIndex = indices[minDifficultyIndex]
-        indices[minDifficultyIndex] = minMapIndex
+        indices[minDifficultyIndex] = minMapIndex + 1
 
         local map = maps[minDifficultyIndex][minMapIndex]
         local delta = map.mapCode - previousMapCode
@@ -459,6 +459,8 @@ local room = {
 -- UI --
 --------
 
+-- Text areas
+
 local TextArea = {}
 TextArea.__index = TextArea
 
@@ -476,16 +478,31 @@ function TextArea.new(text, x, y, width, height, backgroundColor, borderColor, b
         backgroundColor = backgroundColor,
         borderColor = borderColor,
         backgroundAlpha = backgroundAlpha,
-        fixed = fixed
+        fixed = fixed,
+        shownTo = {}
     }, TextArea)
 end
 
 function TextArea:show(playerName)
+    self.shownTo[playerName] = true
     ui.addTextArea(self.id, self.text, playerName, self.x + 5, self.y + 5, self.width - 10, self.height - 10, self.backgroundColor, self.borderColor, self.backgroundAlpha, self.fixed)
 end
 
 function TextArea:hide(playerName)
+    self.shownTo[playerName] = nil
     ui.removeTextArea(self.id, playerName)
+end
+
+function TextArea:toggle(playerName, state)
+    if state == nil then
+        state = not self.shownTo[playerName]
+    end
+
+    if state then
+        self:show(playerName)
+    else
+        self:hide(playerName)
+    end
 end
 
 function TextArea:updateText(newText)
@@ -493,9 +510,38 @@ function TextArea:updateText(newText)
     ui.updateTextArea(self.id, newText, nil)
 end
 
-local helpButtonBackground = TextArea.new("", 0, 20, 40, 10, 0x301f16, 0x301f16, 1.0, true)
-local helpButton = TextArea.new("<font size='10' color='#5073d4'><B>Help</B></font>", 0, 15, 50, 30, 0x000000, 0x000000, 0, true)
-local leaderboard = TextArea.new("<p align='center'><N><B>Leaderboard</B></p>", 810, 0, 200, 200, 0x301f16, 0x301f16, 0.75, true)
+-- Text area groups
+
+local TextAreaGroup = {}
+TextAreaGroup.__index = TextAreaGroup
+
+function TextAreaGroup.new(textAreas)
+    return setmetatable({
+        textAreas = textAreas
+    }, TextAreaGroup)
+end
+
+function TextAreaGroup:show(playerName)
+    for _, textArea in ipairs(self.textAreas) do
+        textArea:show(playerName)
+    end
+end
+
+function TextAreaGroup:hide(playerName)
+    for _, textArea in ipairs(self.textAreas) do
+        textArea:hide(playerName)
+    end
+end
+
+-- UI elements
+
+local UI = {
+    helpButton = TextAreaGroup.new{
+        TextArea.new("", 0, 20, 40, 10, 0x301f16, 0x301f16, 1.0, true),
+        TextArea.new("<font size='10'><J><B>Help</B></J></font>", 0, 15, 50, 30, 0x000000, 0x000000, 0, true)
+    },
+    leaderboard = TextArea.new("", 10, 40, 200, 160, 0x301f16, 0x301f16, 0.75, true)
+}
 
 ---------------
 -- Callbacks --
@@ -503,25 +549,31 @@ local leaderboard = TextArea.new("<p align='center'><N><B>Leaderboard</B></p>", 
 
 local KEY_CALLBACKS = {}
 KEY_CALLBACKS[string.byte("G")] = function(playerName, down)
-    tfm.exec.killPlayer(playerName)
+    if down then
+        tfm.exec.killPlayer(playerName)
+    end
 end
 
 KEY_CALLBACKS[string.byte("J")] = function(playerName, down)
-    if room.isSizeMap then
+    if down and room.isSizeMap then
         tfm.exec.changePlayerSize(playerName, room.playerSizes[1])
     end
 end
 
 KEY_CALLBACKS[string.byte("K")] = function(playerName, down)
-    if room.isSizeMap then
+    if down and room.isSizeMap then
         tfm.exec.changePlayerSize(playerName, room.playerSizes[2])
     end
 end
 
 KEY_CALLBACKS[string.byte("L")] = function(playerName, down)
-    if room.isSizeMap then
+    if down and room.isSizeMap then
         tfm.exec.changePlayerSize(playerName, room.playerSizes[3])
     end
+end
+
+KEY_CALLBACKS[string.byte("O")] = function(playerName, down)
+    UI.leaderboard:toggle(playerName, down)
 end
 
 function eventKeyboard(playerName, keyCode, down, xPlayerPosition, yPlayerPosition)
@@ -581,13 +633,13 @@ local RANKING_COLORS = {
 }
 
 local function updateLeaderboard()
-    local leaderboardText = "<B>Leaderboard</B>\n"
+    local leaderboardText = "<p align='center'><b>Leaderboard</b></p>\n"
     for i = 1, #room.leaderboard do
         local entry = room.leaderboard[i]
         local color = RANKING_COLORS[i] or "BL"
         leaderboardText = leaderboardText .. string.format("<p align='left'><%s>%d.</%s> %s <G>-</G> <V>%.2fs</V></p>", color, i, color, entry.playerName, entry.time / 100)
     end
-    leaderboard:updateText(leaderboardText)
+    UI.leaderboard:updateText(leaderboardText)
 end
 
 local function clearLeaderboard()
@@ -606,10 +658,9 @@ local function initializePlayer(playerName)
     tfm.exec.setPlayerScore(playerName, 0, false)
     for key, _ in pairs(KEY_CALLBACKS) do
         system.bindKeyboard(playerName, key, true, true)
+        system.bindKeyboard(playerName, key, false, true)
     end
-    helpButtonBackground:show(playerName)
-    helpButton:show(playerName)
-    leaderboard:show(playerName)
+    UI.helpButton:show(playerName)
 end
 
 function eventNewPlayer(playerName)
@@ -773,6 +824,11 @@ function eventChatCommand(playerName, command)
         tfm.exec.newGame(room.currentMapEntry.mapCode)
     elseif cmd == "dump" then
         print("<R>" .. MAPS_DATA .. "</R>")
+    elseif cmd == "time" then
+        local newTime = tonumber(args:match("^%d+$"))
+        if newTime then
+            tfm.exec.setGameTime(newTime, true)
+        end
     end
 end
 

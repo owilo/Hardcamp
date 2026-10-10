@@ -1,0 +1,1120 @@
+<!-- Temporary map viewer, will be replaced by a proper implementation later -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Map list viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f1f2ee;
+  --surface: #ffffff;
+  --ink: #16181d;
+  --muted: #666d68;
+  --line: #dcded6;
+  --line-strong: #c3c6bb;
+  --row-hover: #f6f7f3;
+  --accent: #2a4bd7;
+  --bad: #c0352e;
+  --bad-bg: #fcefee;
+  --d1: #23864f; --d1t: #ffffff;
+  --d2: #f0c32c; --d2t: #2b2300;
+  --d3: #ee8a1d; --d3t: #2e1700;
+  --d4: #c93a33; --d4t: #ffffff;
+  --s0: #c93a33; --s0t: #ffffff;
+  --s1: #23864f; --s1t: #ffffff;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.12);
+  color-scheme: light;
+
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1113;
+    --surface: #171a1d;
+    --ink: #e8eae4;
+    --muted: #8f978d;
+    --line: #272b2e;
+    --line-strong: #383d41;
+    --row-hover: #1c2024;
+    --accent: #8aa2ff;
+    --bad: #ff8179;
+    --bad-bg: #2b1716;
+    --d1: #2fa862; --d1t: #04170c;
+    --d2: #e8b923; --d2t: #231b00;
+    --d3: #e7852a; --d3t: #241200;
+    --d4: #e0524a; --d4t: #1f0503;
+    --s0: #e0524a; --s0t: #1f0503;
+    --s1: #2fa862; --s1t: #04170c;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1113;
+  --surface: #171a1d;
+  --ink: #e8eae4;
+  --muted: #8f978d;
+  --line: #272b2e;
+  --line-strong: #383d41;
+  --row-hover: #1c2024;
+  --accent: #8aa2ff;
+  --bad: #ff8179;
+  --bad-bg: #2b1716;
+  --d1: #2fa862; --d1t: #04170c;
+  --d2: #e8b923; --d2t: #231b00;
+  --d3: #e7852a; --d3t: #241200;
+  --d4: #e0524a; --d4t: #1f0503;
+  --s0: #e0524a; --s0t: #1f0503;
+  --s1: #2fa862; --s1t: #04170c;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: inherit; }
+html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.app {
+  height: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Header */
+.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
+.top h1 { margin: 0; font-size: 24px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; }
+.top p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Buttons */
+.btn {
+  height: 36px; padding: 0 14px; border-radius: 9px;
+  border: 1px solid var(--line-strong); background: var(--surface);
+  font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--row-hover); border-color: var(--muted); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover:not(:disabled) { background: var(--ink); opacity: .88; }
+.btn.danger { color: var(--bad); }
+.btn.ghost { border-color: transparent; background: transparent; }
+
+/* Tools */
+.tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.search {
+  position: relative; flex: 1 1 260px; min-width: 0; display: flex; align-items: center;
+}
+.search svg.mag { position: absolute; left: 11px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
+.search input {
+  width: 100%; height: 36px; padding: 0 36px 0 34px; border-radius: 9px;
+  border: 1px solid var(--line-strong); background: var(--surface);
+}
+.search input::placeholder { color: var(--muted); }
+.search .x {
+  position: absolute; right: 5px; width: 26px; height: 26px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center;
+}
+.search .x:hover { background: var(--row-hover); color: var(--ink); }
+.search .x svg { width: 14px; height: 14px; }
+
+/* Status line */
+.status { display: flex; align-items: center; gap: 12px; min-height: 26px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 8px;
+  border-radius: 999px; border: 1px solid var(--bad); background: var(--bad-bg); color: var(--bad);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.chip svg { width: 14px; height: 14px; }
+.chip.on { background: var(--bad); color: var(--surface); }
+
+/* Table */
+.table-wrap {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+}
+table { width: 100%; min-width: 600px; border-collapse: separate; border-spacing: 0; }
+thead th {
+  position: sticky; top: 0; z-index: 2; background: var(--surface);
+  text-align: left; font-weight: 600; font-size: 13px; color: var(--muted);
+  padding: 0 8px; height: 40px; border-bottom: 1px solid var(--line-strong);
+}
+th .sort {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; margin-left: -8px;
+  border: 0; border-radius: 6px; background: transparent; color: inherit; font-weight: 600; cursor: pointer;
+}
+th .sort:hover { background: var(--row-hover); color: var(--ink); }
+th[aria-sort="ascending"], th[aria-sort="descending"] { color: var(--ink); }
+th .arr { display: inline-block; width: 1em; text-align: center; opacity: .35; }
+th .arr::after { content: "\2195"; }
+th[aria-sort="ascending"] .arr, th[aria-sort="descending"] .arr { opacity: 1; color: var(--accent); }
+th[aria-sort="ascending"] .arr::after { content: "\2191"; }
+th[aria-sort="descending"] .arr::after { content: "\2193"; }
+tbody td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--row-hover); }
+.c-idx { width: 56px; }
+.c-code { width: 190px; }
+.c-diff { width: 130px; }
+.c-size { width: 120px; }
+.c-act { width: 48px; }
+td.idx { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; padding-left: 12px; }
+td.act { text-align: right; padding-right: 10px; }
+
+input.cell {
+  width: 100%; height: 32px; padding: 0 8px; border-radius: 7px;
+  border: 1px solid transparent; background: transparent;
+}
+input.cell.mono { font-family: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14px; }
+input.cell:hover { border-color: var(--line-strong); }
+input.cell:focus { border-color: var(--accent); background: var(--surface); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+input.cell.invalid { border-color: var(--bad); background: var(--bad-bg); }
+
+.pill {
+  display: inline-block; min-width: 56px; height: 28px; padding: 0 12px; border: 0; border-radius: 999px;
+  font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; text-align-last: center;
+  cursor: pointer; appearance: none; -webkit-appearance: none; line-height: 28px;
+}
+.pill:hover { filter: brightness(1.07); }
+.d1 { background: var(--d1); color: var(--d1t); }
+.d2 { background: var(--d2); color: var(--d2t); }
+.d3 { background: var(--d3); color: var(--d3t); }
+.d4 { background: var(--d4); color: var(--d4t); }
+.s0 { background: var(--s0); color: var(--s0t); }
+.s1 { background: var(--s1); color: var(--s1t); }
+.pill option { background: var(--surface); color: var(--ink); }
+
+.icon {
+  width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+  display: inline-grid; place-items: center; cursor: pointer;
+}
+.icon:hover { background: var(--bad-bg); color: var(--bad); }
+.icon svg { width: 15px; height: 15px; }
+
+.empty { padding: 56px 24px; text-align: center; color: var(--muted); }
+.empty strong { display: block; color: var(--ink); font-size: 17px; margin-bottom: 4px; }
+.empty p { margin: 0 auto 16px; max-width: 46ch; }
+
+/* Pager */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+.pager .group { display: flex; align-items: center; gap: 8px; }
+.pager select { height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); }
+.pager .btn { height: 32px; padding: 0 12px; }
+
+/* Dialogs */
+dialog {
+  border: 1px solid var(--line); border-radius: 14px; padding: 22px; background: var(--surface); color: var(--ink);
+  width: min(660px, calc(100vw - 32px)); box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(8, 10, 12, .55); }
+dialog h2 { margin: 0 0 4px; font-size: 19px; letter-spacing: -0.01em; }
+dialog .lead { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+dialog textarea {
+  width: 100%; height: 240px; resize: vertical; padding: 10px 12px; border-radius: 9px;
+  border: 1px solid var(--line-strong); background: var(--bg);
+  font-family: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5;
+}
+.info { margin: 10px 0 0; font-size: 14px; color: var(--muted); white-space: pre-line; min-height: 21px; }
+.info.ok { color: var(--d1); }
+.info.err { color: var(--bad); }
+.dlg-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 16px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); margin-bottom: 12px; }
+.seg button { height: 30px; padding: 0 14px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 600; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.problems { margin: 0 0 4px; padding: 12px 14px 12px 32px; border-radius: 9px; background: var(--bad-bg); color: var(--bad); font-size: 14px; }
+.problems li + li { margin-top: 3px; }
+
+/* Toast */
+.toast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 14px; max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px; border-radius: 10px; background: var(--ink); color: var(--bg);
+  box-shadow: var(--shadow); font-size: 14px; z-index: 50; transition: opacity .18s ease, transform .18s ease;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast.error { background: var(--bad); color: #fff; }
+.toast button { border: 0; background: transparent; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 4px 6px; }
+
+/* Drop overlay */
+.drop {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(2px);
+}
+.drop div { padding: 28px 40px; border: 2px dashed var(--accent); border-radius: 16px; background: var(--surface); font-size: 18px; font-weight: 600; }
+
+@media (max-width: 560px) {
+  .app { padding: 14px 12px 12px; }
+  .actions { width: 100%; }
+  .actions .btn { flex: 1; }
+  .tools .btn { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Map list</h1>
+      <p>Open a CSV or Base64 string, edit the rows, then export it back.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnOpen" type="button" title="Load maps.csv from this site">Load map list</button>
+      <button class="btn" id="btnCsv" type="button" title="Choose any CSV file from your computer">Load CSV</button>
+      <button class="btn" id="btnPaste" type="button">Paste data</button>
+      <button class="btn primary" id="btnExport" type="button">Export</button>
+    </div>
+  </header>
+
+  <div class="tools">
+    <div class="search">
+      <svg class="mag" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+      <input id="filter" type="text" placeholder="Filter by author or code" aria-label="Filter by author or code" autocomplete="off" spellcheck="false">
+      <button class="x" id="filterClear" type="button" aria-label="Clear filter" hidden>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
+      </button>
+    </div>
+    <button class="btn" id="btnAdd" type="button">Add row</button>
+    <button class="btn danger" id="btnClear" type="button">Clear all</button>
+  </div>
+
+  <div class="status">
+    <span id="count" aria-live="polite"></span>
+    <button class="chip" id="chipInvalid" type="button" hidden></button>
+  </div>
+
+  <div class="table-wrap">
+    <table id="table" hidden>
+      <colgroup>
+        <col class="c-idx"><col><col class="c-code"><col class="c-diff"><col class="c-size"><col class="c-act">
+      </colgroup>
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col" data-th="author" aria-sort="none"><button class="sort" type="button" data-sort="author">Author<span class="arr"></span></button></th>
+          <th scope="col" data-th="code" aria-sort="none"><button class="sort" type="button" data-sort="code">Code<span class="arr"></span></button></th>
+          <th scope="col" data-th="difficulty" aria-sort="none"><button class="sort" type="button" data-sort="difficulty">Difficulty<span class="arr"></span></button></th>
+          <th scope="col" data-th="sizemap" aria-sort="none"><button class="sort" type="button" data-sort="sizemap">Sizemap<span class="arr"></span></button></th>
+          <th scope="col"><span class="sr">Remove row</span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden></div>
+  </div>
+
+  <footer class="pager" id="pager" hidden>
+    <span id="pageInfo"></span>
+    <div class="group">
+      <label for="pageSize">Rows per page</label>
+      <select id="pageSize">
+        <option>50</option><option selected>100</option><option>250</option><option>500</option>
+      </select>
+      <button class="btn" id="prev" type="button">Previous</button>
+      <button class="btn" id="next" type="button">Next</button>
+    </div>
+  </footer>
+</div>
+
+<input type="file" id="fileInput" accept=".csv,.txt,text/csv,text/plain" hidden>
+
+<dialog id="dlgImport" aria-labelledby="importTitle">
+  <h2 id="importTitle">Paste data</h2>
+  <p class="lead">Paste CSV rows or a Base64 string. The format is detected automatically.</p>
+  <textarea id="importText" spellcheck="false" placeholder="Author, Code, Difficulty, Sizemap&#10;Arthur#0000, 764650, 1, 0"></textarea>
+  <p class="info" id="importInfo"></p>
+  <div class="dlg-actions">
+    <button class="btn ghost" id="importCancel" type="button">Cancel</button>
+    <button class="btn" id="importAppend" type="button" disabled>Add to table</button>
+    <button class="btn primary" id="importReplace" type="button" disabled>Replace table</button>
+  </div>
+</dialog>
+
+<dialog id="dlgExport" aria-labelledby="exportTitle">
+  <h2 id="exportTitle">Export</h2>
+  <p class="lead">Exports every row in the table, whatever the current filter.</p>
+  <div class="seg" role="group" aria-label="Export format">
+    <button type="button" id="fmtCsv" aria-pressed="true">CSV</button>
+    <button type="button" id="fmtB64" aria-pressed="false">Base64</button>
+  </div>
+  <ul class="problems" id="exportProblems" hidden></ul>
+  <textarea id="exportText" readonly spellcheck="false"></textarea>
+  <p class="info" id="exportInfo"></p>
+  <div class="dlg-actions">
+    <button class="btn ghost" id="exportClose" type="button">Close</button>
+    <button class="btn" id="exportShow" type="button" hidden>Show rows with problems</button>
+    <button class="btn" id="exportCopy" type="button">Copy</button>
+    <button class="btn primary" id="exportSave" type="button">Save file</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="drop" id="drop" hidden><div>Drop a CSV or text file to load it</div></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ============================================================
+   CODEC START  (mirrors the Lua BitWriter / BitReader exactly)
+   ============================================================ */
+const B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const B64_INDEX = new Map([...B64_ALPHABET].map((c, i) => [c, i]));
+const AUTHOR_RE = /^(\+?)([A-Za-z0-9_]{1,15})#(\d{4})$/;
+const MAX_CODE = 4294967295;      // Lua uses bit32, so values are 32-bit
+const MAX_AUTHORS = 255;          // 8-bit author count
+const MAX_MAPS = 65535;           // 16-bit map count
+
+function ceilLog2(count) {
+  let b = 0, s = 1;
+  while (s < count) { b++; s *= 2; }
+  return b;
+}
+
+class BitWriter {
+  constructor() { this.bytes = [0]; this.cur = 0; }
+  writeBits(value, n) {
+    value = value % Math.pow(2, n);
+    while (n > 0) {
+      const take = Math.min(8 - this.cur, n);
+      const chunk = value % (1 << take);
+      const last = this.bytes.length - 1;
+      this.bytes[last] = (this.bytes[last] | (chunk << this.cur)) & 0xFF;
+      value = Math.floor(value / (1 << take));
+      n -= take;
+      this.cur += take;
+      if (this.cur === 8) { this.bytes.push(0); this.cur = 0; }
+    }
+  }
+  writePlayerList(authors) {
+    this.writeBits(authors.length, 8);
+    for (const author of authors) {
+      const m = AUTHOR_RE.exec(author);
+      this.writeBits(m[1] === "+" ? 1 : 0, 1);       // "+" prefix
+      this.writeBits(m[2].length, 4);                // name length
+      for (const ch of m[2]) this.writeBits(B64_INDEX.get(ch) ?? 0, 6);
+      this.writeBits(parseInt(m[3], 10), 14);        // tag
+    }
+  }
+  writeVariableLength(value, blockSize) {
+    do {
+      const block = value % Math.pow(2, blockSize);
+      value = Math.floor(value / Math.pow(2, blockSize));
+      this.writeBits(block, blockSize);
+      this.writeBits(value > 0 ? 1 : 0, 1);          // continuation bit
+    } while (value > 0);
+  }
+  toBytes() {
+    const out = this.bytes.slice();
+    if (this.cur === 0) out.pop();
+    return Uint8Array.from(out);
+  }
+}
+
+class BitReader {
+  constructor(bytes) { this.data = bytes; this.pos = 0; this.limit = bytes.length * 8; }
+  readBits(n) {
+    let value = 0, shift = 0;
+    while (n > 0) {
+      const off = this.pos & 7;
+      const take = Math.min(8 - off, n);
+      const byte = this.data[this.pos >> 3] ?? 0;
+      const bits = (byte >> off) & ((1 << take) - 1);
+      value += bits * Math.pow(2, shift);
+      shift += take;
+      n -= take;
+      this.pos += take;
+    }
+    if (this.pos > this.limit) throw new Error("The data ends unexpectedly. Is the Base64 string complete?");
+    return value;
+  }
+  readPlayerList() {
+    const authors = [];
+    const count = this.readBits(8);
+    for (let i = 0; i < count; i++) {
+      const prefix = this.readBits(1) === 1 ? "+" : "";
+      const len = this.readBits(4);
+      let name = "";
+      for (let j = 0; j < len; j++) name += B64_ALPHABET[this.readBits(6)];
+      const tag = String(this.readBits(14)).padStart(4, "0");
+      authors.push(prefix + name + "#" + tag);
+    }
+    return authors;
+  }
+  readVariableLength(payload) {
+    let value = 0, shift = 0;
+    while (shift < 64) {
+      const block = this.readBits(payload);
+      value += block * Math.pow(2, shift);
+      shift += payload;
+      if (this.readBits(1) === 0) return value;
+    }
+    return value;
+  }
+  readMaps(authors) {
+    const rows = [];
+    const count = this.readBits(16);
+    const authorBits = ceilLog2(authors.length);
+    let previous = 0;
+    for (let i = 0; i < count; i++) {
+      previous += this.readVariableLength(5);
+      const authorIndex = this.readBits(authorBits);
+      const difficulty = this.readBits(2) + 1;
+      const sizemap = this.readBits(1);
+      rows.push({ author: authors[authorIndex] ?? "", code: String(previous), difficulty, sizemap });
+    }
+    return rows;
+  }
+}
+
+function encodeBase64(bytes) {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b1 = bytes[i], b2 = bytes[i + 1], b3 = bytes[i + 2];
+    const c1 = b1 >> 2;
+    const c2 = ((b1 & 0x03) << 4) | (b2 !== undefined ? b2 >> 4 : 0);
+    const c3 = b2 !== undefined ? ((b2 & 0x0F) << 2) | (b3 !== undefined ? b3 >> 6 : 0) : null;
+    const c4 = b3 !== undefined ? b3 & 0x3F : null;
+    out += B64_ALPHABET[c1] + B64_ALPHABET[c2];
+    out += c3 !== null ? B64_ALPHABET[c3] : "=";
+    out += c4 !== null ? B64_ALPHABET[c4] : "=";
+  }
+  return out;
+}
+
+function decodeBase64(str) {
+  str = str.replace(/\+/g, "-").replace(/\//g, "_").replace(/[^A-Za-z0-9_\-=]/g, "");
+  const out = [];
+  for (let i = 0; i < str.length; i += 4) {
+    const c1 = B64_INDEX.get(str[i]) ?? 0;
+    const c2 = B64_INDEX.get(str[i + 1]) ?? 0;
+    const c3 = B64_INDEX.get(str[i + 2]);
+    const c4 = B64_INDEX.get(str[i + 3]);
+    out.push(((c1 << 2) | (c2 >> 4)) & 0xFF);
+    if (c3 !== undefined) out.push(((c2 << 4) | (c3 >> 2)) & 0xFF);
+    if (c3 !== undefined && c4 !== undefined) out.push(((c3 << 6) | c4) & 0xFF);
+  }
+  return Uint8Array.from(out);
+}
+
+/* rows: [{author, code (string), difficulty 1-4, sizemap 0|1}] -> bytes
+   Layout: player list, then map count (16 bits), then maps sorted by code. */
+function encodeRows(rows) {
+  const authors = [];
+  const seen = new Set();
+  for (const r of rows) {
+    if (!seen.has(r.author)) { seen.add(r.author); authors.push(r.author); }
+  }
+  const authorIndex = new Map(authors.map((a, i) => [a, i]));
+  const sorted = rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => (Number(a.r.code) - Number(b.r.code)) || (a.r.difficulty - b.r.difficulty) || (a.i - b.i))
+    .map(x => x.r);
+
+  const w = new BitWriter();
+  w.writePlayerList(authors);
+  w.writeBits(sorted.length, 16);
+  const authorBits = ceilLog2(authors.length);
+  let previous = 0;
+  for (const r of sorted) {
+    const code = Number(r.code);
+    w.writeVariableLength(code - previous, 5);
+    previous = code;
+    w.writeBits(authorIndex.get(r.author), authorBits);
+    w.writeBits(r.difficulty - 1, 2);
+    w.writeBits(r.sizemap ? 1 : 0, 1);
+  }
+  return w.toBytes();
+}
+
+function decodeBytes(bytes) {
+  const reader = new BitReader(bytes);
+  const authors = reader.readPlayerList();
+  return reader.readMaps(authors);
+}
+/* CODEC END */
+
+/* ============================================================
+   CSV PARSING START
+   ============================================================ */
+function parseCSV(text) {
+  text = text.replace(/^\uFEFF/, "");
+  const firstLine = text.split(/\r?\n/).find(l => l.trim() !== "") || "";
+  const delim = [",", ";", "\t"]
+    .map(d => [d, firstLine.split(d).length])
+    .sort((a, b) => b[1] - a[1])[0][0];
+
+  const records = [];
+  let cells = [], field = "", inQuotes = false, line = 1, startLine = 1;
+  const endRow = () => {
+    cells.push(field.trim());
+    field = "";
+    if (cells.some(c => c !== "")) records.push({ cells, line: startLine });
+    cells = [];
+  };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+      } else field += ch;
+    } else if (ch === '"' && field.trim() === "") {
+      inQuotes = true; field = "";
+    } else if (ch === delim) {
+      cells.push(field.trim()); field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      endRow(); line++; startLine = line;
+    } else field += ch;
+  }
+  endRow();
+  return records;
+}
+
+function parseBool(s) {
+  const v = String(s).trim().toLowerCase();
+  if (v === "1" || v === "true" || v === "yes") return 1;
+  if (v === "0" || v === "false" || v === "no") return 0;
+  return null;
+}
+
+function csvToRows(text) {
+  const records = parseCSV(text);
+  if (!records.length) throw new Error("No rows found in this CSV.");
+  const NAMES = ["author", "code", "difficulty", "sizemap"];
+  const cols = { author: 0, code: 1, difficulty: 2, sizemap: 3 };
+  const head = records[0].cells.map(c => c.toLowerCase());
+  let start = 0;
+  if (head.some(c => NAMES.includes(c))) {
+    start = 1;
+    for (const n of NAMES) {
+      const idx = head.indexOf(n);
+      if (idx < 0) throw new Error(`The header row has no "${n[0].toUpperCase() + n.slice(1)}" column.`);
+      cols[n] = idx;
+    }
+  }
+  const need = Math.max(...Object.values(cols)) + 1;
+  const rows = [], errors = [];
+  for (const rec of records.slice(start)) {
+    const c = rec.cells;
+    if (c.length < need) { errors.push(`Line ${rec.line}: expected ${need} columns, found ${c.length}.`); continue; }
+    const difficulty = Number(c[cols.difficulty]);
+    const sizemap = parseBool(c[cols.sizemap]);
+    if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 4) {
+      errors.push(`Line ${rec.line}: difficulty must be 1, 2, 3 or 4 (found "${c[cols.difficulty]}").`); continue;
+    }
+    if (sizemap === null) {
+      errors.push(`Line ${rec.line}: sizemap must be 0 or 1 (found "${c[cols.sizemap]}").`); continue;
+    }
+    rows.push({ author: c[cols.author], code: c[cols.code].replace(/^@/, ""), difficulty, sizemap });
+  }
+  if (errors.length) {
+    const more = errors.length > 5 ? `\n…and ${errors.length - 5} more.` : "";
+    throw new Error(errors.slice(0, 5).join("\n") + more);
+  }
+  return rows;
+}
+
+function parseInput(text) {
+  const t = text.trim();
+  if (!t) throw new Error("Nothing to import yet.");
+  if (/[,#;\t]/.test(t)) return { format: "CSV", rows: csvToRows(t) };
+  if (/^[A-Za-z0-9_\-+\/=\s]+$/.test(t)) return { format: "Base64", rows: decodeBytes(decodeBase64(t)) };
+  throw new Error("This doesn't look like CSV or Base64.");
+}
+/* CSV PARSING END */
+
+/* ============================================================
+   App state
+   ============================================================ */
+const state = {
+  rows: [], nextId: 1,
+  sortKey: null, sortDir: 1,
+  filter: "", onlyInvalid: false,
+  page: 1, pageSize: 100,
+};
+
+const $ = id => document.getElementById(id);
+const el = {
+  tbody: $("tbody"), table: $("table"), empty: $("empty"), count: $("count"), chip: $("chipInvalid"),
+  filter: $("filter"), filterClear: $("filterClear"), pager: $("pager"), pageInfo: $("pageInfo"),
+  pageSize: $("pageSize"), prev: $("prev"), next: $("next"), toast: $("toast"), drop: $("drop"),
+  fileInput: $("fileInput"),
+  dlgImport: $("dlgImport"), importText: $("importText"), importInfo: $("importInfo"),
+  importAppend: $("importAppend"), importReplace: $("importReplace"),
+  dlgExport: $("dlgExport"), exportText: $("exportText"), exportInfo: $("exportInfo"),
+  exportProblems: $("exportProblems"), exportShow: $("exportShow"),
+  exportCopy: $("exportCopy"), exportSave: $("exportSave"),
+  fmtCsv: $("fmtCsv"), fmtB64: $("fmtB64"),
+};
+
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const WARN_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l6.5 11.5h-13z"/><path d="M8 6.5v3"/><path d="M8 11.6v.1"/></svg>';
+const X_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>';
+
+function makeRow(p = {}) {
+  return { id: state.nextId++, author: p.author ?? "", code: p.code ?? "", difficulty: p.difficulty ?? 1, sizemap: p.sizemap ?? 0 };
+}
+const getRow = id => state.rows.find(r => r.id === id);
+
+/* ---------- validation ---------- */
+function fieldErrors(r) {
+  const e = {};
+  if (!AUTHOR_RE.test(r.author)) {
+    e.author = r.author ? "Use Name#0000: letters, digits or _ (up to 15), a 4-digit tag, and an optional + prefix." : "Author is required.";
+  }
+  if (!/^\d+$/.test(r.code)) e.code = r.code ? "Code must be digits only." : "Code is required.";
+  else if (Number(r.code) > MAX_CODE) e.code = "Code can be at most 4294967295.";
+  return e;
+}
+const hasErrors = r => Object.keys(fieldErrors(r)).length > 0;
+const invalidCount = () => state.rows.reduce((n, r) => n + (hasErrors(r) ? 1 : 0), 0);
+
+/* ---------- view (filter + sort) ---------- */
+function getView() {
+  const n = state.filter.trim().toLowerCase();
+  const nc = n.replace(/^@/, "");
+  let view = state.rows.filter(r => {
+    if (state.onlyInvalid && !hasErrors(r)) return false;
+    if (!n) return true;
+    return r.author.toLowerCase().includes(n) || (nc !== "" && r.code.includes(nc));
+  });
+  if (state.sortKey) {
+    const idx = new Map(state.rows.map((r, i) => [r, i]));
+    const num = s => (s === "" || isNaN(Number(s)) ? -1 : Number(s));
+    const dir = state.sortDir, key = state.sortKey;
+    view = view.slice().sort((a, b) => {
+      let c;
+      if (key === "author") c = a.author.toLowerCase().localeCompare(b.author.toLowerCase());
+      else if (key === "code") c = num(a.code) - num(b.code);
+      else c = a[key] - b[key];
+      return c * dir || idx.get(a) - idx.get(b);
+    });
+  }
+  return view;
+}
+
+/* ---------- rendering ---------- */
+function rowHTML(r, n) {
+  const e = fieldErrors(r);
+  const attrs = f => e[f] ? ` aria-invalid="true" title="${esc(e[f])}"` : "";
+  return `<tr data-id="${r.id}">
+    <td class="idx">${n}</td>
+    <td><input class="cell${e.author ? " invalid" : ""}" data-field="author" value="${esc(r.author)}" placeholder="Name#0000" spellcheck="false" autocomplete="off" aria-label="Author, row ${n}"${attrs("author")}></td>
+    <td><input class="cell mono${e.code ? " invalid" : ""}" data-field="code" value="${esc(r.code)}" placeholder="Map code" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="Code, row ${n}"${attrs("code")}></td>
+    <td><select class="pill d${r.difficulty}" data-field="difficulty" aria-label="Difficulty, row ${n}">${[1, 2, 3, 4].map(d => `<option value="${d}"${d === r.difficulty ? " selected" : ""}>${d}</option>`).join("")}</select></td>
+    <td><button type="button" class="pill s${r.sizemap}" data-act="toggle" aria-label="Sizemap ${r.sizemap}, row ${n}. Click to change.">${r.sizemap}</button></td>
+    <td class="act"><button type="button" class="icon" data-act="remove" aria-label="Remove row ${n}">${X_SVG}</button></td>
+  </tr>`;
+}
+
+function render() {
+  const view = getView();
+  const total = state.rows.length;
+  const pages = Math.max(1, Math.ceil(view.length / state.pageSize));
+  state.page = Math.min(Math.max(1, state.page), pages);
+  const start = (state.page - 1) * state.pageSize;
+  const slice = view.slice(start, start + state.pageSize);
+  const pos = new Map(state.rows.map((r, i) => [r.id, i + 1]));
+
+  el.tbody.innerHTML = slice.map(r => rowHTML(r, pos.get(r.id))).join("");
+  el.table.hidden = total === 0;
+
+  // empty states
+  if (total === 0) {
+    el.empty.hidden = false;
+    el.empty.innerHTML = `<strong>No maps yet</strong><p>Load your map list, paste CSV or Base64 data, or drop a file anywhere on this page. You can also add rows by hand.</p><button type="button" class="btn" data-empty="load">Load map list</button>`;
+  } else if (view.length === 0) {
+    el.empty.hidden = false;
+    el.empty.innerHTML = `<strong>No rows match</strong><p>Nothing matches “${esc(state.filter.trim())}”.</p><button type="button" class="btn" data-empty="clearfilter">Clear filter</button>`;
+  } else {
+    el.empty.hidden = true;
+  }
+
+  // counts
+  const noun = n => `${n.toLocaleString()} ${n === 1 ? "map" : "maps"}`;
+  el.count.textContent = total === 0 ? "No maps"
+    : view.length === total ? noun(total)
+    : `${view.length.toLocaleString()} of ${noun(total)}`;
+  el.filterClear.hidden = state.filter === "";
+
+  // sort headers
+  document.querySelectorAll("th[data-th]").forEach(th => {
+    th.setAttribute("aria-sort", th.dataset.th === state.sortKey ? (state.sortDir === 1 ? "ascending" : "descending") : "none");
+  });
+
+  // pager
+  el.pager.hidden = pages === 1;
+  if (pages > 1) {
+    el.pageInfo.textContent = `${(start + 1).toLocaleString()}–${(start + slice.length).toLocaleString()} of ${view.length.toLocaleString()} · page ${state.page} of ${pages}`;
+    el.prev.disabled = state.page <= 1;
+    el.next.disabled = state.page >= pages;
+  }
+  updateInvalidChip();
+  return view;
+}
+
+let statusQueued = false;
+function scheduleStatus() {
+  if (statusQueued) return;
+  statusQueued = true;
+  requestAnimationFrame(() => { statusQueued = false; updateInvalidChip(); });
+}
+function updateInvalidChip() {
+  const n = invalidCount();
+  if (n === 0 && state.onlyInvalid) { state.onlyInvalid = false; render(); return; }
+  el.chip.hidden = n === 0;
+  if (n === 0) return;
+  el.chip.classList.toggle("on", state.onlyInvalid);
+  el.chip.setAttribute("aria-pressed", String(state.onlyInvalid));
+  el.chip.title = state.onlyInvalid ? "Show all rows" : "Show only rows with problems";
+  el.chip.innerHTML = WARN_SVG + esc(state.onlyInvalid
+    ? `Showing ${n} with problems · Show all`
+    : `${n} ${n === 1 ? "row has" : "rows have"} problems`);
+}
+
+function goToRow(row) {
+  state.filter = ""; el.filter.value = ""; state.onlyInvalid = false;
+  const i = getView().indexOf(row);
+  state.page = Math.floor(Math.max(0, i) / state.pageSize) + 1;
+  render();
+  const tr = el.tbody.querySelector(`tr[data-id="${row.id}"]`);
+  if (tr) {
+    tr.scrollIntoView({ block: "nearest" });
+    const first = tr.querySelector("input");
+    if (first) first.focus();
+  }
+}
+
+/* ---------- toast ---------- */
+let toastTimer;
+function toast(msg, opts = {}) {
+  clearTimeout(toastTimer);
+  el.toast.textContent = "";
+  const span = document.createElement("span");
+  span.textContent = msg;
+  el.toast.appendChild(span);
+  if (opts.action) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = opts.label || "Undo";
+    b.addEventListener("click", () => { opts.action(); el.toast.classList.remove("show"); });
+    el.toast.appendChild(b);
+  }
+  el.toast.classList.toggle("error", !!opts.error);
+  el.toast.classList.add("show");
+  toastTimer = setTimeout(() => el.toast.classList.remove("show"), opts.action ? 9000 : opts.error ? 7000 : 4000);
+}
+
+/* ---------- table edits ---------- */
+const snapshot = () => state.rows.map(r => ({ ...r }));
+function restore(snap) {
+  state.rows = snap;
+  render();
+}
+
+el.tbody.addEventListener("input", e => {
+  const input = e.target.closest("[data-field]");
+  if (!input || input.tagName === "SELECT") return;
+  const row = getRow(Number(input.closest("tr").dataset.id));
+  const f = input.dataset.field;
+  row[f] = f === "code" ? input.value.trim().replace(/^@/, "") : input.value.trim();
+  const err = fieldErrors(row)[f];
+  input.classList.toggle("invalid", !!err);
+  if (err) { input.title = err; input.setAttribute("aria-invalid", "true"); }
+  else { input.removeAttribute("title"); input.removeAttribute("aria-invalid"); }
+  scheduleStatus();
+});
+
+el.tbody.addEventListener("change", e => {
+  const sel = e.target.closest("select[data-field]");
+  if (!sel) return;
+  const row = getRow(Number(sel.closest("tr").dataset.id));
+  row.difficulty = Number(sel.value);
+  sel.className = "pill d" + row.difficulty;
+});
+
+el.tbody.addEventListener("click", e => {
+  const btn = e.target.closest("[data-act]");
+  if (!btn) return;
+  const tr = btn.closest("tr");
+  const row = getRow(Number(tr.dataset.id));
+  if (btn.dataset.act === "toggle") {
+    row.sizemap = row.sizemap ? 0 : 1;
+    btn.className = "pill s" + row.sizemap;
+    btn.textContent = row.sizemap;
+    btn.setAttribute("aria-label", `Sizemap ${row.sizemap}. Click to change.`);
+  } else if (btn.dataset.act === "remove") {
+    const snap = snapshot();
+    state.rows = state.rows.filter(r => r !== row);
+    render();
+    toast("Row removed.", { action: () => restore(snap) });
+  }
+});
+
+el.empty.addEventListener("click", e => {
+  const b = e.target.closest("[data-empty]");
+  if (!b) return;
+  if (b.dataset.empty === "clearfilter") { state.filter = ""; el.filter.value = ""; state.page = 1; render(); }
+  if (b.dataset.empty === "load") loadMapList();
+});
+
+$("btnAdd").addEventListener("click", () => {
+  const row = makeRow();
+  state.rows.push(row);
+  goToRow(row);
+});
+
+$("btnClear").addEventListener("click", () => {
+  if (!state.rows.length) { toast("The table is already empty."); return; }
+  const snap = snapshot();
+  state.rows = []; state.filter = ""; el.filter.value = ""; state.onlyInvalid = false; state.page = 1;
+  render();
+  toast("Table cleared.", { action: () => restore(snap) });
+});
+
+/* ---------- filter / sort / paging ---------- */
+el.filter.addEventListener("input", () => { state.filter = el.filter.value; state.page = 1; render(); });
+el.filter.addEventListener("keydown", e => {
+  if (e.key === "Escape" && el.filter.value) { el.filter.value = ""; state.filter = ""; state.page = 1; render(); }
+});
+el.filterClear.addEventListener("click", () => { el.filter.value = ""; state.filter = ""; state.page = 1; render(); el.filter.focus(); });
+
+document.querySelector("thead").addEventListener("click", e => {
+  const b = e.target.closest("[data-sort]");
+  if (!b) return;
+  const key = b.dataset.sort;
+  if (state.sortKey === key) state.sortDir = -state.sortDir;
+  else { state.sortKey = key; state.sortDir = 1; }
+  state.page = 1;
+  render();
+});
+
+el.chip.addEventListener("click", () => { state.onlyInvalid = !state.onlyInvalid; state.page = 1; render(); });
+el.pageSize.addEventListener("change", () => { state.pageSize = Number(el.pageSize.value); state.page = 1; render(); });
+el.prev.addEventListener("click", () => { state.page--; render(); el.table.scrollIntoView({ block: "start" }); });
+el.next.addEventListener("click", () => { state.page++; render(); el.table.scrollIntoView({ block: "start" }); });
+
+/* ---------- importing ---------- */
+function replaceRows(rows, msg) {
+  const snap = state.rows.length ? snapshot() : null;
+  state.rows = rows.map(makeRow);
+  state.filter = ""; el.filter.value = ""; state.onlyInvalid = false; state.page = 1;
+  render();
+  toast(msg, snap ? { action: () => restore(snap) } : {});
+}
+function appendRows(rows, msg) {
+  const snap = snapshot();
+  const added = rows.map(makeRow);
+  state.rows.push(...added);
+  render();
+  if (added.length) goToRow(added[0]);
+  toast(msg, { action: () => restore(snap) });
+}
+const mapsLabel = n => `${n.toLocaleString()} ${n === 1 ? "map" : "maps"}`;
+
+async function loadFile(file) {
+  try {
+    const text = await file.text();
+    const res = parseInput(text);
+    const bad = res.rows.filter(r => hasErrors(r)).length;
+    replaceRows(res.rows, `Loaded ${mapsLabel(res.rows.length)} from ${file.name} (${res.format})${bad ? ` · ${bad} with problems` : ""}.`);
+  } catch (err) {
+    toast(err.message.split("\n")[0], { error: true });
+  }
+}
+
+async function loadMapList() {
+  try {
+    const res = await fetch("maps.csv", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    await loadFile(new File([blob], "maps.csv"));
+  } catch (err) {
+    toast("Couldn't load maps.csv from this page's folder.", {
+      error: true, action: () => el.fileInput.click(), label: "Choose file",
+    });
+  }
+}
+$("btnOpen").addEventListener("click", loadMapList);
+$("btnCsv").addEventListener("click", () => el.fileInput.click());
+el.fileInput.addEventListener("change", () => {
+  const f = el.fileInput.files[0];
+  el.fileInput.value = "";
+  if (f) loadFile(f);
+});
+
+let hoverDepth = 0;
+const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+window.addEventListener("dragenter", e => { if (hasFiles(e)) { e.preventDefault(); hoverDepth++; el.drop.hidden = false; } });
+window.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener("dragleave", e => {
+  if (hasFiles(e)) { hoverDepth = Math.max(0, hoverDepth - 1); if (!hoverDepth) el.drop.hidden = true; }
+});
+window.addEventListener("drop", e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); hoverDepth = 0; el.drop.hidden = true;
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+
+let parsed = null;
+function updateImportInfo() {
+  const raw = el.importText.value;
+  try {
+    parsed = parseInput(raw);
+    const bad = parsed.rows.filter(r => hasErrors(r)).length;
+    el.importInfo.className = "info ok";
+    el.importInfo.textContent = `Detected ${parsed.format} · ${mapsLabel(parsed.rows.length)}` + (bad ? ` (${bad} with problems you can fix after loading)` : "");
+    el.importAppend.disabled = el.importReplace.disabled = parsed.rows.length === 0;
+  } catch (err) {
+    parsed = null;
+    el.importAppend.disabled = el.importReplace.disabled = true;
+    if (raw.trim()) { el.importInfo.className = "info err"; el.importInfo.textContent = err.message; }
+    else { el.importInfo.className = "info"; el.importInfo.textContent = ""; }
+  }
+}
+$("btnPaste").addEventListener("click", () => {
+  el.importText.value = ""; updateImportInfo();
+  el.dlgImport.showModal();
+  el.importText.focus();
+});
+el.importText.addEventListener("input", updateImportInfo);
+$("importCancel").addEventListener("click", () => el.dlgImport.close());
+el.importReplace.addEventListener("click", () => {
+  if (!parsed) return;
+  const p = parsed; el.dlgImport.close();
+  replaceRows(p.rows, `Loaded ${mapsLabel(p.rows.length)} (${p.format}).`);
+});
+el.importAppend.addEventListener("click", () => {
+  if (!parsed) return;
+  const p = parsed; el.dlgImport.close();
+  appendRows(p.rows, `Added ${mapsLabel(p.rows.length)} (${p.format}).`);
+});
+
+/* ---------- exporting ---------- */
+let exportFormat = "csv";
+let downloadsCap = null;
+
+function collectErrors() {
+  const errs = [];
+  if (!state.rows.length) return ["The table is empty."];
+  state.rows.forEach((r, i) => {
+    const e = fieldErrors(r);
+    if (e.author) errs.push(`Row ${i + 1}: ${e.author}`);
+    if (e.code) errs.push(`Row ${i + 1}: ${e.code}`);
+  });
+  if (state.rows.length > MAX_MAPS) errs.push(`The format holds at most ${MAX_MAPS.toLocaleString()} maps (there are ${state.rows.length.toLocaleString()}).`);
+  const authors = new Set(state.rows.map(r => r.author));
+  if (authors.size > MAX_AUTHORS) errs.push(`The format holds at most ${MAX_AUTHORS} different authors (there are ${authors.size}).`);
+  return errs;
+}
+
+function toCSV(rows) {
+  return ["Author, Code, Difficulty, Sizemap"]
+    .concat(rows.map(r => `${r.author}, ${Number(r.code)}, ${r.difficulty}, ${r.sizemap}`))
+    .join("\n") + "\n";
+}
+
+function buildExport() {
+  el.fmtCsv.setAttribute("aria-pressed", String(exportFormat === "csv"));
+  el.fmtB64.setAttribute("aria-pressed", String(exportFormat === "b64"));
+  const errs = collectErrors();
+  const blocked = errs.length > 0;
+  el.exportProblems.hidden = !blocked;
+  el.exportText.hidden = blocked;
+  el.exportCopy.disabled = el.exportSave.disabled = blocked;
+  el.exportShow.hidden = !(blocked && invalidCount() > 0);
+  if (blocked) {
+    el.exportProblems.innerHTML = errs.slice(0, 6).map(m => `<li>${esc(m)}</li>`).join("")
+      + (errs.length > 6 ? `<li>…and ${errs.length - 6} more.</li>` : "");
+    el.exportInfo.className = "info err";
+    el.exportInfo.textContent = "Fix these before exporting.";
+    return;
+  }
+  if (exportFormat === "csv") {
+    el.exportText.value = toCSV(state.rows);
+    el.exportInfo.className = "info";
+    el.exportInfo.textContent = `${mapsLabel(state.rows.length)} · Author, Code, Difficulty, Sizemap`;
+  } else {
+    const bytes = encodeRows(state.rows);
+    const b64 = encodeBase64(bytes);
+    el.exportText.value = b64;
+    el.exportInfo.className = "info";
+    el.exportInfo.textContent = `${mapsLabel(state.rows.length)} · ${bytes.length.toLocaleString()} bytes · ${b64.length.toLocaleString()} characters`;
+  }
+}
+
+$("btnExport").addEventListener("click", () => { buildExport(); el.dlgExport.showModal(); });
+el.fmtCsv.addEventListener("click", () => { exportFormat = "csv"; buildExport(); });
+el.fmtB64.addEventListener("click", () => { exportFormat = "b64"; buildExport(); });
+$("exportClose").addEventListener("click", () => el.dlgExport.close());
+el.exportShow.addEventListener("click", () => {
+  el.dlgExport.close();
+  state.onlyInvalid = true; state.page = 1; render();
+});
+
+el.exportCopy.addEventListener("click", async () => {
+  const text = el.exportText.value;
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (_) {
+    try { el.exportText.select(); ok = document.execCommand("copy"); } catch (_) { ok = false; }
+  }
+  toast(ok ? "Copied to the clipboard." : "Couldn't copy automatically. Select the text and copy it.", { error: !ok });
+});
+
+el.exportSave.addEventListener("click", async () => {
+  const text = el.exportText.value;
+  const filename = exportFormat === "csv" ? "maps.csv" : "maps-base64.txt";
+  if (downloadsCap) {
+    try { await downloadsCap.save({ filename, data: text }); }
+    catch (err) {
+      if (err && err.code === "declined") return;
+      toast("Couldn't save the file. Use Copy instead.", { error: true });
+    }
+    return;
+  }
+  // Fallback when this page is opened outside the Claude viewer
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+});
+
+if (window.claude && typeof window.claude.use === "function") {
+  window.claude.use("downloads").then(d => { downloadsCap = d; }).catch(() => {});
+}
+
+/* ---------- init ---------- */
+render();
+})();
+</script>
+</body>
+</html>
