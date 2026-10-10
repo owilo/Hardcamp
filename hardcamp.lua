@@ -452,7 +452,9 @@ local room = {
     rotation = {1, 3, 2, 1, 4, 2, 1, 3, 2},
     currentRotationIndex = 1,
     xmlTree = nil,
-    leaderboard = {}
+    leaderboard = {},
+    queuedMap = nil,
+    elapsedTime = nil
 }
 
 --------
@@ -700,6 +702,19 @@ local function getMapEntry(maps, mapCode)
     }
 end
 
+local function canPlayMap()
+    return room.elapsedTime == nil or room.elapsedTime >= 3000
+end
+
+local function playMap(mapCode, mirror)
+    if not canPlayMap() then
+        room.queuedMap = {mapCode = mapCode, mirror = mirror}
+        return
+    else
+        tfm.exec.newGame(mapCode, mirror)
+    end
+end
+
 local function playRandomMap(difficulty)
     if difficulty then
         difficulty = math.max(1, math.min(4, difficulty))
@@ -707,7 +722,7 @@ local function playRandomMap(difficulty)
         difficulty = math.random(4)
     end
     local mapList = MAPS[difficulty]
-    tfm.exec.newGame(mapList[math.random(#mapList)].mapCode)
+    playMap(mapList[math.random(#mapList)].mapCode, math.random() < 0.2)
 end
 
 local function playNextMap()
@@ -746,6 +761,12 @@ local function updateMapDataUi(mapEntry)
 end
 
 function eventLoop(elapsedTime, remainingTime)
+    room.elapsedTime = elapsedTime
+
+    if room.queuedMap and canPlayMap() then
+        playMap(room.queuedMap.mapCode, room.queuedMap.mirror)
+    end
+
     if remainingTime < 500 then
         playNextMap()
     end
@@ -756,6 +777,8 @@ end
 function eventNewGame()
     local mapCode = tonumber(tfm.get.room.currentMap:match("(%d+)"))
     room.currentMapEntry = getMapEntry(MAPS, mapCode)
+    room.queuedMap = nil
+    room.elapsedTime = 0
 
     room.playerSizes = nil
     if room.currentMapEntry.author then
@@ -821,7 +844,7 @@ function eventChatCommand(playerName, command)
     elseif cmd == "next" then
         playNextMap()
     elseif cmd == "reset" then
-        tfm.exec.newGame(room.currentMapEntry.mapCode)
+        playMap(room.currentMapEntry.mapCode)
     elseif cmd == "dump" then
         print("<R>" .. MAPS_DATA .. "</R>")
     elseif cmd == "time" then
