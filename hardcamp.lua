@@ -64,6 +64,14 @@ local function deepCopy(t)
     return copy
 end
 
+local function keySet(t)
+    local set = {}
+    for k, _ in pairs(t) do
+        set[#set + 1] = k
+    end
+    return set
+end
+
 -- Base 64 helpers
 
 local B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
@@ -495,21 +503,11 @@ function TextArea:hide(playerName)
     ui.removeTextArea(self.id, playerName)
 end
 
-function TextArea:toggle(playerName, state)
-    if state == nil then
-        state = not self.shownTo[playerName]
+function TextArea:updateText(newText, playerName)
+    if not playerName then
+        self.text = newText
     end
-
-    if state then
-        self:show(playerName)
-    else
-        self:hide(playerName)
-    end
-end
-
-function TextArea:updateText(newText)
-    self.text = newText
-    ui.updateTextArea(self.id, newText, nil)
+    ui.updateTextArea(self.id, newText, playerName)
 end
 
 -- Text area groups
@@ -517,20 +515,23 @@ end
 local TextAreaGroup = {}
 TextAreaGroup.__index = TextAreaGroup
 
-function TextAreaGroup.new(textAreas)
+function TextAreaGroup.new(textAreas, displayOrder)
     return setmetatable({
-        textAreas = textAreas
+        ta = textAreas,
+        displayOrder = displayOrder or keySet(textAreas)
     }, TextAreaGroup)
 end
 
 function TextAreaGroup:show(playerName)
-    for _, textArea in ipairs(self.textAreas) do
+    for _, key in ipairs(self.displayOrder) do
+        local textArea = self.ta[key]
         textArea:show(playerName)
     end
 end
 
 function TextAreaGroup:hide(playerName)
-    for _, textArea in ipairs(self.textAreas) do
+    for _, key in ipairs(self.displayOrder) do
+        local textArea = self.ta[key]
         textArea:hide(playerName)
     end
 end
@@ -538,12 +539,114 @@ end
 -- UI elements
 
 local UI = {
-    helpButton = TextAreaGroup.new{
-        TextArea.new("", 0, 20, 40, 10, 0x301f16, 0x301f16, 1.0, true),
-        TextArea.new("<font size='10'><J><B>Help</B></J></font>", 0, 15, 50, 30, 0x000000, 0x000000, 0, true)
-    },
-    leaderboard = TextArea.new("", 10, 40, 200, 160, 0x301f16, 0x301f16, 0.75, true)
+    menuButton = TextAreaGroup.new({
+        background = TextArea.new("", 0, 20, 60, 10, 0x301f16, 0x301f16, 1.0, true),
+        content = TextArea.new("<font size='10'><p align='center'><J><B><a href='event:openMenu'>Menu ⮞</a></B></J></p></font>", -5, 15, 70, 30, 0x000000, 0x000000, 0, true)
+    }, {"background", "content"}),
+    helpButton = TextAreaGroup.new({
+        background = TextArea.new("", 65, 20, 60, 10, 0x301f16, 0x301f16, 1.0, true),
+        content = TextArea.new("<font size='10'><p align='center'><J><B><a href='event:closeMainWindows;open:help'>Help</a></B></J></p></font>", 60, 15, 70, 30, 0x000000, 0x000000, 0, true)
+    }, {"background", "content"}),
+    profileButton = TextAreaGroup.new({
+        background = TextArea.new("", 130, 20, 60, 10, 0x301f16, 0x301f16, 1.0, true),
+        content = TextArea.new("<font size='10'><p align='center'><J><B><a href='event:closeMainWindows;openProfile'>Profile</a></B></J></p></font>", 125, 15, 70, 30, 0x000000, 0x000000, 0, true)
+    }, {"background", "content"}),
+    leaderboardButton = TextAreaGroup.new({
+        background = TextArea.new("", 195, 20, 60, 10, 0x301f16, 0x301f16, 1.0, true),
+        content = TextArea.new("<font size='10'><p align='center'><J><B><a href='event:open:leaderboard'>Leaderboard</a></B></J></p></font>", 190, 15, 70, 30, 0x000000, 0x000000, 0, true)
+    }, {"background", "content"}),
+    mapsButton = TextAreaGroup.new({
+        background = TextArea.new("", 260, 20, 60, 10, 0x301f16, 0x301f16, 1.0, true),
+        content = TextArea.new("<font size='10'><p align='center'><J><B><a href='event:closeMainWindows;open:maps'>Maps</a></B></J></p></font>", 255, 15, 70, 30, 0x000000, 0x000000, 0, true)
+    }, {"background", "content"}),
+    leaderboard = TextArea.new("", 10, 40, 200, 160, 0x301f16, 0x301f16, 0.75, true),
+    help = TextArea.new("Help", 200, 100, 400, 200, 0x301f16, 0x301f16, 1, true),
+    maps = TextArea.new("Maps", 200, 100, 400, 200, 0x301f16, 0x301f16, 1, true),
+    profile = TextArea.new("", 200, 100, 400, 200, 0x301f16, 0x301f16, 1, true)
 }
+
+local function findPath(root, path)
+    for tag in path:gmatch("([^.]+)") do
+        root = root[tag]
+        if not root then
+            return nil
+        end
+    end
+    return root
+end
+
+local UICallbacks = {
+    open = function(playerName, parameters)
+        local root = UI
+        local path = parameters[1]
+        if not path then
+            return
+        end
+        local element = findPath(UI, path)
+        if element then
+            element:show(playerName)
+        end
+    end,
+
+    close = function(playerName, parameters)
+        local root = UI
+        local path = parameters[1]
+        if not path then
+            return
+        end
+        local element = findPath(UI, path)
+        if element then
+            element:hide(playerName)
+        end
+    end,
+
+    closeMainWindows = function(playerName, parameters)
+        UI.help:hide(playerName)
+        UI.profile:hide(playerName)
+        UI.maps:hide(playerName)
+    end,
+
+    openMenu = function(playerName, parameters)
+        UI.menuButton.ta.content:updateText("<font size='10'><p align='center'><J><B><a href='event:closeMenu'>Menu ⮜</a></B></J></p></font>", playerName)
+        UI.helpButton:show(playerName)
+        UI.profileButton:show(playerName)
+        UI.leaderboardButton:show(playerName)
+        UI.mapsButton:show(playerName)
+    end,
+
+    closeMenu = function(playerName, parameters)
+        UI.menuButton.ta.content:updateText("<font size='10'><p align='center'><J><B><a href='event:openMenu'>Menu ⮞</a></B></J></p></font>", playerName)
+        UI.helpButton:hide(playerName)
+        UI.profileButton:hide(playerName)
+        UI.leaderboardButton:hide(playerName)
+        UI.mapsButton:hide(playerName)
+    end,
+
+    openProfile = function(playerName, parameters)
+        UI.profile:show(playerName)
+        local targetPlayer = parameters and parameters[1] or playerName
+        UI.profile:updateText(string.format("<p align='center'><b>Profile: %s</b></p>\n<p align='center'>Score: <V>%d</V></p>", targetPlayer, tfm.get.room.playerList[targetPlayer] and tfm.get.room.playerList[targetPlayer].score or 0), playerName)
+    end,
+}
+
+function eventTextAreaCallback(textAreaId, playerName, eventName)
+    -- Callback separator ";", parameters separator ":"
+    for commands in eventName:gmatch("([^;]+)") do
+        local command, parameters = commands:match("([^:]+):(.*)")
+        if not command then
+            command = commands
+            parameters = ""
+        end
+        local params = {}
+        for param in parameters:gmatch("([^,]+)") do
+            params[#params + 1] = param
+        end
+        local callback = UICallbacks[command]
+        if callback then
+            callback(playerName, params)
+        end
+    end
+end
 
 ---------------
 -- Callbacks --
@@ -574,8 +677,57 @@ KEY_CALLBACKS[string.byte("L")] = function(playerName, down)
     end
 end
 
+KEY_CALLBACKS[string.byte("M")] = function(playerName, down)
+    if down then
+        if UI.helpButton.ta.content.shownTo[playerName] then
+            UICallbacks.closeMenu(playerName)
+        else
+            UICallbacks.openMenu(playerName)
+        end
+    end
+end
+
+KEY_CALLBACKS[string.byte("N")] = function(playerName, down)
+    if down then
+        if UI.maps.shownTo[playerName] then
+            UI.maps:hide(playerName)
+        else
+            UICallbacks.closeMainWindows(playerName)
+            UI.maps:show(playerName)
+        end
+    end
+end
+
+KEY_CALLBACKS[string.byte("H")] = function(playerName, down)
+    if down then
+        if UI.help.shownTo[playerName] then
+            UI.help:hide(playerName)
+        else
+            UICallbacks.closeMainWindows(playerName)
+            UI.help:show(playerName)
+        end
+    end
+end
+
 KEY_CALLBACKS[string.byte("O")] = function(playerName, down)
-    UI.leaderboard:toggle(playerName, down)
+    if down then
+        if UI.leaderboard.shownTo[playerName] then
+            UI.leaderboard:hide(playerName)
+        else
+            UI.leaderboard:show(playerName)
+        end
+    end
+end
+
+KEY_CALLBACKS[string.byte("P")] = function(playerName, down)
+    if down then
+        if UI.profile.shownTo[playerName] then
+            UI.profile:hide(playerName)
+        else
+            UICallbacks.closeMainWindows(playerName)
+            UICallbacks.openProfile(playerName)
+        end
+    end
 end
 
 function eventKeyboard(playerName, keyCode, down, xPlayerPosition, yPlayerPosition)
@@ -639,7 +791,7 @@ local function updateLeaderboard()
     for i = 1, #room.leaderboard do
         local entry = room.leaderboard[i]
         local color = RANKING_COLORS[i] or "BL"
-        leaderboardText = leaderboardText .. string.format("<p align='left'><%s>%d.</%s> %s <G>-</G> <V>%.2fs</V></p>", color, i, color, entry.playerName, entry.time / 100)
+        leaderboardText = leaderboardText .. string.format("<p align='left'><%s>%d.</%s> <a href='event:openProfile:%s'>%s</a> <G>-</G> <V>%.2fs</V></p>", color, i, color, entry.playerName, entry.playerName, entry.time / 100)
     end
     UI.leaderboard:updateText(leaderboardText)
 end
@@ -662,7 +814,7 @@ local function initializePlayer(playerName)
         system.bindKeyboard(playerName, key, true, true)
         system.bindKeyboard(playerName, key, false, true)
     end
-    UI.helpButton:show(playerName)
+    UI.menuButton:show(playerName)
 end
 
 function eventNewPlayer(playerName)
